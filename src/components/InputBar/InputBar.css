@@ -1,0 +1,75 @@
+.input-container {
+  width: 100%;
+  background-color: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+.input-container:focus-within {
+  border-color: var(--accent-color);
+}
+
+.main-input {
+  background: transparent;
+  border: none;
+  color: var(--text-color);
+  font-size: 14px;
+  outline: none;
+  font-family: inherit;
+  width: 100%;
+}
+.main-input::placeholder {
+  color: var(--input-placeholder);
+}
+
+.input-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 6px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: color 0.2s, background-color 0.2s;
+}
+.action-btn:hover {
+  color: var(--text-color);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.action-btn.pill {
+  border-radius: 6px;
+  padding: 6px 12px;
+}
+
+.right-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.send-btn {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+}
+.send-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}

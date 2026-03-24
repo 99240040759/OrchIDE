@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 
@@ -8,13 +8,14 @@ if (started) {
 }
 
 const createWindow = () => {
-  // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 800,
-    height: 600,
+    width: 1024,
+    height: 768,
+    show: false,
+    backgroundColor: '#1F1F1F',
     titleBarStyle: 'hidden',
     titleBarOverlay: process.platform === 'win32' ? {
-      color: '#1e1e1e',
+      color: '#181818',
       symbolColor: '#e0e0e0',
       height: 32
     } : false,
@@ -32,14 +33,60 @@ const createWindow = () => {
     );
   }
 
+  // Show window only when React is fully mounted
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+  });
+
   // Open the DevTools.
-  mainWindow.webContents.openDevTools();
+  // mainWindow.webContents.openDevTools();
 };
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.on('ready', createWindow);
+app.on('ready', () => {
+  createWindow();
+
+  ipcMain.on('open-settings', () => {
+    const settingsWindow = new BrowserWindow({
+      width: 800,
+      height: 600,
+      show: false,
+      backgroundColor: '#1F1F1F',
+      titleBarStyle: 'hidden',
+      titleBarOverlay: process.platform === 'win32' ? {
+        color: '#161616',
+        symbolColor: '#e0e0e0',
+        height: 32
+      } : false,
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.js'),
+      },
+    });
+
+    if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+      settingsWindow.loadURL(`${MAIN_WINDOW_VITE_DEV_SERVER_URL}#/settings`);
+    } else {
+      settingsWindow.loadFile(
+        path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
+        { hash: 'settings' }
+      );
+    }
+
+    settingsWindow.once('ready-to-show', () => {
+      settingsWindow.show();
+    });
+  });
+
+  ipcMain.on('close-window', (event) => {
+    const webContents = event.sender;
+    const win = BrowserWindow.fromWebContents(webContents);
+    if (win) {
+      win.close();
+    }
+  });
+});
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits

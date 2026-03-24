@@ -1,16 +1,23 @@
 :root {
   --titlebar-height: 32px;
-  --bg-color: #121212;
-  --titlebar-bg: #1e1e1e;
-  --text-color: #e0e0e0;
-  --border-color: #333333;
+  --bg-color: #1F1F1F;
+  --titlebar-bg: #181818;
+  --text-color: #cccccc;
+  --sidebar-bg: #181818;
+  --sidebar-border: #2B2B2B;
+  --text-muted: #9d9d9d;
+  --accent-color: #0078D4;
+  --hover-bg: #2B2B2B;
+  --input-bg: #313131;
+  --input-border: #3C3C3C;
+  --input-placeholder: #989898;
+  --border-color: #2b2b2b;
 }
 
 body {
   margin: 0;
   padding: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
-    Arial, sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   background-color: var(--bg-color);
   color: var(--text-color);
   overflow: hidden;
@@ -19,54 +26,45 @@ body {
   flex-direction: column;
 }
 
-#title-bar {
-  height: var(--titlebar-height);
-  width: 100%;
+#root {
   display: flex;
-  align-items: center;
-  /* Industry standard: Only the bar is draggable */
-  -webkit-app-region: drag;
-  background-color: var(--titlebar-bg);
-  user-select: none;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+#left-sidebar {
+  width: 260px;
   flex-shrink: 0;
-  font-size: 12px;
-  font-weight: 500;
-  border-bottom: 1px solid var(--border-color);
-  box-sizing: border-box;
+  background-color: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-border);
+  display: flex;
+  flex-direction: column;
 }
 
-#title {
-  padding: 0 16px;
-  opacity: 0.9;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  font-weight: 600;
-  pointer-events: none;
+#right-sidebar {
+  width: 280px;
+  flex-shrink: 0;
+  background-color: var(--sidebar-bg);
+  border-left: 1px solid var(--sidebar-border);
+  display: flex;
+  flex-direction: column;
 }
 
-/* macOS: Traffic lights are top-left. Standard offset is ~72px */
-.platform-darwin #title-bar {
-  padding-left: 72px;
-}
-
-/* Windows: Window Controls Overlay (WCO) handles the right side.
-   The title bar should avoid overlapping with the overlay area.
-*/
-@media (max-width: 100%) {
-  .platform-win32 #title-bar {
-    /* The OS draws the buttons. We just provide the background and title. */
-    padding-right: env(titlebar-area-width, 0px);
-  }
-}
-
-#content {
+#main-content {
   flex: 1;
-  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-color);
   overflow-y: auto;
-  line-height: 1.6;
 }
 
-h1 {
-  margin-top: 0;
-  font-weight: 300;
+#editor-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-color);
+  border-left: 1px solid var(--sidebar-border);
+  min-width: 300px;
 }

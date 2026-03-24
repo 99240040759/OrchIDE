@@ -1,0 +1,75 @@
+#title-bar {
+  height: var(--titlebar-height);
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  -webkit-app-region: drag;
+  background-color: var(--titlebar-bg);
+  user-select: none;
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 500;
+  border-bottom: 1px solid var(--border-color);
+  box-sizing: border-box;
+}
+
+#title {
+  padding: 0 16px;
+  opacity: 0.9;
+  letter-spacing: 0.2px;
+  font-weight: 500;
+  pointer-events: none;
+  flex: 1;
+  text-align: center;
+  color: var(--text-color);
+}
+
+.title-muted {
+  color: var(--text-muted);
+}
+
+.titlebar-actions {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-actions.left {
+  padding-left: 12px;
+}
+
+.titlebar-actions.right {
+  padding-right: 12px;
+}
+
+.toggle-sidebar-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 0 8px;
+  transition: color 0.2s, background-color 0.2s;
+}
+
+.toggle-sidebar-btn:hover {
+  color: var(--text-color);
+  background-color: rgba(255,255,255,0.05);
+}
+
+/* macOS: Traffic lights are top-left. Standard offset is ~72px */
+.platform-darwin .titlebar-actions.left {
+  padding-left: 72px;
+}
+
+/* Windows: Window Controls Overlay (WCO) handles the right side */
+@media (max-width: 100%) {
+  .platform-win32 .titlebar-actions.right {
+    padding-right: env(titlebar-area-width, 0px);
+  }
+}

@@ -1,0 +1,204 @@
+.settings-window {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: var(--bg-color);
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+  color: var(--text-color);
+}
+
+.settings-titlebar {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 1px solid var(--sidebar-border);
+  -webkit-app-region: drag;
+  position: relative;
+  background-color: var(--titlebar-bg);
+}
+
+.st-drag-area {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-color);
+}
+
+.st-close-btn {
+  position: absolute;
+  right: 12px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.st-close-btn:hover {
+  background-color: var(--hover-bg);
+  color: var(--text-color);
+}
+
+.settings-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.settings-sidebar {
+  width: 240px;
+  border-right: 1px solid var(--sidebar-border);
+  display: flex;
+  flex-direction: column;
+  padding: 16px 8px;
+  background-color: var(--sidebar-bg);
+}
+
+.ss-nav {
+  flex: 1;
+}
+
+.ss-item {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+  border-radius: 6px;
+  cursor: pointer;
+  margin-bottom: 2px;
+  font-weight: 500;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.ss-item:hover {
+  color: var(--text-color);
+  background-color: var(--hover-bg);
+}
+
+.ss-item.active {
+  background-color: var(--hover-bg);
+  color: var(--text-color);
+}
+
+.ss-divider {
+  height: 1px;
+  background-color: var(--sidebar-border);
+  margin: 12px 12px;
+}
+
+.ss-footer {
+  margin-top: auto;
+}
+
+.settings-content {
+  flex: 1;
+  padding: 40px 60px;
+  background-color: var(--bg-color);
+  overflow-y: auto;
+}
+
+.sc-section {
+  margin-bottom: 40px;
+  max-width: 800px;
+}
+
+.sc-section-title {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-bottom: 12px;
+  letter-spacing: 0.5px;
+}
+
+.sc-card {
+  background-color: var(--sidebar-bg);
+  border: 1px solid var(--sidebar-border);
+  border-radius: 8px;
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+.sc-card-info {
+  flex: 1;
+}
+
+.sc-card-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-color);
+  margin-bottom: 6px;
+}
+
+.sc-card-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.sc-card-action {
+  flex-shrink: 0;
+  padding-top: 4px;
+}
+
+/* Toggle Switch */
+.toggle-switch {
+  width: 40px;
+  height: 24px;
+  background-color: var(--input-bg);
+  border-radius: 12px;
+  position: relative;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.toggle-switch.active {
+  background-color: var(--text-color);
+}
+
+.toggle-knob {
+  width: 18px;
+  height: 18px;
+  background-color: #ffffff;
+  border-radius: 50%;
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  transition: transform 0.2s;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.toggle-switch.active .toggle-knob {
+  transform: translateX(16px);
+  background-color: var(--sidebar-bg);
+}
+
+/* Dropdown Btn */
+.dropdown-btn {
+  background-color: var(--input-bg);
+  border: 1px solid var(--input-border);
+  color: var(--text-color);
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background-color 0.2s;
+}
+
+.dropdown-btn:hover {
+  background-color: var(--hover-bg);
+}

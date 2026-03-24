@@ -1,0 +1,89 @@
+.editor-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  height: 100%;
+}
+
+.editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 48px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--sidebar-border);
+  background-color: var(--bg-color);
+  flex-shrink: 0;
+}
+
+.eh-left, .eh-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.eh-icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 4px;
+  transition: color 0.2s, background-color 0.2s;
+}
+
+.eh-icon-btn:hover {
+  color: var(--text-color);
+  background-color: rgba(255,255,255,0.05);
+}
+
+.eh-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 8px;
+}
+
+.eh-file-icon {
+  color: var(--text-color);
+}
+
+.eh-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.eh-review-btn {
+  background-color: rgba(255,255,255,0.05);
+  border: 1px solid var(--sidebar-border);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: color 0.2s, background-color 0.2s;
+  font-family: inherit;
+}
+
+.eh-review-btn:hover {
+  color: var(--text-color);
+  background-color: rgba(255,255,255,0.1);
+}
+
+.editor-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  color: var(--text-muted);
+  font-size: 14px;
+}

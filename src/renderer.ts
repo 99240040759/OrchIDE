@@ -28,14 +28,12 @@
 
 import './index.css';
 
-// @ts-ignore
 const platform = window.electron?.platform || 'unknown';
 document.body.classList.add(`platform-${platform}`);
 
 // Handle Windows Controls Overlay geometry changes (Industry Grade)
 if ('windowControlsOverlay' in navigator) {
-  // @ts-ignore
-  navigator.windowControlsOverlay.addEventListener('geometrychange', (e: any) => {
+  navigator.windowControlsOverlay.addEventListener('geometrychange', (e: WindowControlsOverlayGeometryChangeEvent) => {
     // The browser/Electron will update `env(titlebar-area-*)` CSS variables automatically.
     // We can also perform JS logic here if needed.
     console.log('Title bar geometry changed', e.titlebarAreaRect);

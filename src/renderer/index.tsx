@@ -1,12 +1,12 @@
-import './index.css';
+import './styles/global.css';
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Sidebar } from './components/Sidebar/Sidebar';
-import { RightSidebar } from './components/RightSidebar/RightSidebar';
-import { ChatPanel } from './components/ChatPanel/ChatPanel';
-import { EditorPanel } from './components/EditorPanel/EditorPanel';
-import { TitleBar } from './components/TitleBar/TitleBar';
-import { SettingsWindow } from './components/SettingsWindow/SettingsWindow';
+import { Sidebar } from './layouts/Sidebar/Sidebar';
+import { RightSidebar } from './layouts/RightSidebar/RightSidebar';
+import { ChatPanel } from './panels/ChatPanel/ChatPanel';
+import { EditorPanel } from './panels/EditorPanel/EditorPanel';
+import { TitleBar } from './layouts/TitleBar/TitleBar';
+import { SettingsWindow } from './views/SettingsWindow/SettingsWindow';
 
 const platform = window.electron?.platform || 'unknown';
 document.body.classList.add(`platform-${platform}`);
@@ -17,26 +17,14 @@ if ('windowControlsOverlay' in navigator) {
   });
 }
 
+import { useLayoutStore } from './store/layoutStore';
+
 const App = () => {
-  const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(false);
-  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(false);
-  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const { isLeftSidebarOpen, isRightSidebarOpen, isEditorOpen } = useLayoutStore();
 
   return (
     <>
-      <TitleBar 
-        isLeftSidebarOpen={isLeftSidebarOpen} 
-        onToggleLeftSidebar={() => setIsLeftSidebarOpen(!isLeftSidebarOpen)} 
-        isRightSidebarOpen={isRightSidebarOpen}
-        onToggleRightSidebar={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
-        isEditorOpen={isEditorOpen}
-        onToggleEditor={() => setIsEditorOpen(!isEditorOpen)}
-        onOpenSettings={() => {
-          if ((window as any).electron?.openSettings) {
-            (window as any).electron.openSettings();
-          }
-        }}
-      />
+      <TitleBar />
       <div className="app-body" style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {isLeftSidebarOpen && (
           <div id="left-sidebar">

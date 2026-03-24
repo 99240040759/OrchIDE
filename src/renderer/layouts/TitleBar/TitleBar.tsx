@@ -1,30 +1,27 @@
 import React from 'react';
 import { PanelLeft, PanelRight, MoreHorizontal, CodeXml, Settings } from 'lucide-react';
+import { useLayoutStore } from '../../store/layoutStore';
 import './TitleBar.css';
 
-interface TitleBarProps {
-  onToggleLeftSidebar: () => void;
-  isLeftSidebarOpen: boolean;
-  onToggleRightSidebar: () => void;
-  isRightSidebarOpen: boolean;
-  onToggleEditor: () => void;
-  isEditorOpen: boolean;
-  onOpenSettings: () => void;
-}
+export const TitleBar: React.FC = () => {
+  const { 
+    isLeftSidebarOpen, 
+    isRightSidebarOpen, 
+    isEditorOpen, 
+    toggleLeftSidebar, 
+    toggleRightSidebar, 
+    toggleEditor 
+  } = useLayoutStore();
 
-export const TitleBar: React.FC<TitleBarProps> = ({ 
-  onToggleLeftSidebar, 
-  isLeftSidebarOpen,
-  onToggleRightSidebar,
-  isRightSidebarOpen,
-  onToggleEditor,
-  isEditorOpen,
-  onOpenSettings
-}) => {
+  const handleOpenSettings = () => {
+    if ((window as any).electron?.openSettings) {
+      (window as any).electron.openSettings();
+    }
+  };
   return (
     <div id="title-bar">
       <div className="titlebar-actions left">
-        <button className="toggle-sidebar-btn" onClick={onToggleLeftSidebar} title="Toggle Left Sidebar">
+        <button className="toggle-sidebar-btn" onClick={toggleLeftSidebar} title="Toggle Left Sidebar">
           <PanelLeft size={16} opacity={isLeftSidebarOpen ? 1 : 0.6} />
         </button>
       </div>
@@ -34,16 +31,16 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       </div>
 
       <div className="titlebar-actions right">
-        <button className="toggle-sidebar-btn icon-only" onClick={onOpenSettings} title="Settings">
+        <button className="toggle-sidebar-btn icon-only" onClick={handleOpenSettings} title="Settings">
           <Settings size={16} />
         </button>
         <button className="toggle-sidebar-btn icon-only">
           <MoreHorizontal size={16} />
         </button>
-        <button className="toggle-sidebar-btn" onClick={onToggleEditor} title="Toggle Editor">
+        <button className="toggle-sidebar-btn" onClick={toggleEditor} title="Toggle Editor">
           <CodeXml size={16} opacity={isEditorOpen ? 1 : 0.6} />
         </button>
-        <button className="toggle-sidebar-btn" onClick={onToggleRightSidebar} title="Toggle Right Sidebar">
+        <button className="toggle-sidebar-btn" onClick={toggleRightSidebar} title="Toggle Right Sidebar">
           <PanelRight size={16} opacity={isRightSidebarOpen ? 1 : 0.6} />
         </button>
       </div>

@@ -4,10 +4,19 @@
  */
 
 import { create } from 'zustand';
-import type { Message, ToolCallEvent, StreamEvent } from '../../shared/types';
+import type { ToolCallEvent, StreamEvent } from '../../shared/types';
 
 // Re-export for convenience
-export type { Message, ToolCallEvent };
+export type { ToolCallEvent };
+
+// Extended Message type with tool calls
+export interface Message {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number;
+  toolCalls?: ToolCallEvent[]; // Store tool calls with the message
+}
 
 // ============================================================================
 // Live Stream Part Types
@@ -165,17 +174,32 @@ export const useChatStore = create<ChatState>((set, get) => ({
   finalizeStream: () => {
     const { streamingContent, messages, liveParts } = get();
 
+    // Extract tool calls from live parts
+    const toolCalls = liveParts
+      .filter(p => p.type === 'tool-call' && p.toolCall)
+      .map(p => p.toolCall!);
+
     // Only create message if there's actual content (text or tool calls)
-    const hasContent = streamingContent.trim() || liveParts.some(p => p.type === 'tool-call');
+    const hasContent = streamingContent.trim() || toolCalls.length > 0;
 
     if (hasContent) {
       // Build final message content
-      // For now, just use the text content; tool calls are shown inline during streaming
+      let finalContent = streamingContent;
+
+      // If no text but we have tool calls, create a summary
+      if (!finalContent.trim() && toolCalls.length > 0) {
+        const toolNames = toolCalls
+          .map(tc => tc.toolName.replace(/([A-Z])/g, ' $1').trim())
+          .join(', ');
+        finalContent = `✓ Executed: ${toolNames}`;
+      }
+
       const finalMsg: Message = {
         id: Date.now().toString(),
         role: 'assistant',
-        content: streamingContent || '[Tool execution completed]',
+        content: finalContent || 'Task completed',
         timestamp: Date.now(),
+        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
       };
 
       set({

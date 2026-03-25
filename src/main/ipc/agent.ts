@@ -142,17 +142,18 @@ async function runAgentStream(
         }
 
         case 'tool-call-input-streaming-start': {
-          // Tool call started - create initial tool call card
+          // Tool call started - just initialize tracking, don't send to UI yet
           const payload = part.payload || {};
+          const toolId = payload.toolCallId || uuidv4();
           const toolCall: ToolCallEvent = {
-            id: payload.toolCallId || uuidv4(),
+            id: toolId,
             toolName: payload.toolName || 'unknown',
             args: {},
             status: 'running',
           };
-          activeToolCalls.set(toolCall.id, toolCall);
-          toolCallArgsBuffer.set(toolCall.id, ''); // Initialize args buffer
-          sendEvent('tool-call-start', { toolCall });
+          activeToolCalls.set(toolId, toolCall);
+          toolCallArgsBuffer.set(toolId, ''); // Initialize args buffer
+          // Don't send to UI until we have complete args
           break;
         }
 
@@ -170,7 +171,7 @@ async function runAgentStream(
         }
 
         case 'tool-call-input-streaming-end': {
-          // Tool arguments complete - parse and update the tool call
+          // Tool arguments complete - NOW send the complete tool call card
           const payload = part.payload || {};
           const toolId = payload.toolCallId || '';
           const existing = activeToolCalls.get(toolId);
@@ -180,10 +181,12 @@ async function runAgentStream(
             try {
               existing.args = JSON.parse(argsJson);
               activeToolCalls.set(toolId, existing);
-              sendEvent('tool-call-start', { toolCall: existing }); // Re-send with complete args
+              // Send complete tool call card to UI
+              sendEvent('tool-call-start', { toolCall: existing });
             } catch (e) {
               console.error(`[Agent] Failed to parse tool args for ${toolId}:`, argsJson);
               existing.args = { _raw: argsJson };
+              sendEvent('tool-call-start', { toolCall: existing });
             }
             toolCallArgsBuffer.delete(toolId); // Clean up buffer
           }

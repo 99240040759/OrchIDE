@@ -240,10 +240,24 @@ export const ChatPanel: React.FC = () => {
               <div key={msg.id} className={`message-row ${msg.role}`}>
                 <div className="message-bubble">
                   {msg.role === 'assistant' ? (
-                    <div
-                      className="message-content markdown"
-                      dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
-                    />
+                    <>
+                      {/* Show tool calls if any */}
+                      {msg.toolCalls && msg.toolCalls.length > 0 && (
+                        <div className="message-tool-calls">
+                          {msg.toolCalls.map((tc) => (
+                            <ToolCallCard
+                              key={tc.id}
+                              part={{ type: 'tool-call', id: tc.id, toolCall: tc, timestamp: msg.timestamp }}
+                            />
+                          ))}
+                        </div>
+                      )}
+                      {/* Show text content */}
+                      <div
+                        className="message-content markdown"
+                        dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
+                      />
+                    </>
                   ) : (
                     <div className="message-content">{msg.content}</div>
                   )}

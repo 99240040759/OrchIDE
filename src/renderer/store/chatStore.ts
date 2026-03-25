@@ -198,10 +198,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       .filter(p => p.type === 'tool-call' && p.toolCall)
       .map(p => p.toolCall!);
 
-    // Only create message if there's actual text content
-    const hasTextContent = streamingContent.trim();
+    // Create message if there's content OR tool calls (to persist tool calls)
+    const hasContent = streamingContent.trim() || toolCalls.length > 0;
 
-    if (hasTextContent) {
+    if (hasContent) {
       const finalMsg: Message = {
         id: Date.now().toString(),
         role: 'assistant',
@@ -217,8 +217,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         streamingContent: '',
       });
     } else {
-      // No text content, just clean up streaming state
-      // Tool calls were already shown during streaming
       set({
         isStreaming: false,
         liveParts: [],

@@ -119,29 +119,34 @@ async function runAgentStream(
     // Stream the agent response using fullStream for ALL events
     const stream = await agent.stream(mastraMessages);
 
-    for await (const part of stream.fullStream) {
+    for await (const chunk of stream.fullStream) {
       if (isStreamAborted(sessionId)) {
         console.log(`[Agent] Stream aborted for session ${sessionId}`);
         break;
       }
 
+      const part = chunk as any; // Mastra chunks have varied structure
+
       switch (part.type) {
         case 'text-delta': {
-          // Incremental text chunk
-          const text = part.textDelta || '';
-          fullTextResponse += text;
-          sendEvent('text-delta', { text });
-          // Also send legacy chunk for backwards compatibility
-          send('agent:stream-chunk', { sessionId, chunk: text });
+          // Incremental text chunk - payload contains the text
+          const text = part.payload?.textDelta || '';
+          if (text) {
+            fullTextResponse += text;
+            sendEvent('text-delta', { text });
+            // Also send legacy chunk for backwards compatibility
+            send('agent:stream-chunk', { sessionId, chunk: text });
+          }
           break;
         }
 
         case 'tool-call': {
-          // Tool call initiated
+          // Tool call initiated - payload contains tool info
+          const payload = part.payload || {};
           const toolCall: ToolCallEvent = {
-            id: part.toolCallId || uuidv4(),
-            toolName: part.toolName || 'unknown',
-            args: part.args || {},
+            id: payload.toolCallId || uuidv4(),
+            toolName: payload.toolName || 'unknown',
+            args: payload.args || {},
             status: 'running',
           };
           activeToolCalls.set(toolCall.id, toolCall);
@@ -150,22 +155,23 @@ async function runAgentStream(
         }
 
         case 'tool-result': {
-          // Tool execution completed
-          const toolId = part.toolCallId || '';
+          // Tool execution completed - payload contains result
+          const payload = part.payload || {};
+          const toolId = payload.toolCallId || '';
           const existing = activeToolCalls.get(toolId);
           if (existing) {
             existing.status = 'completed';
-            existing.result = part.result;
+            existing.result = payload.result;
             activeToolCalls.set(toolId, existing);
             sendEvent('tool-result', { toolCall: existing });
           } else {
             // Tool result without prior call (shouldn't happen but handle it)
             const toolCall: ToolCallEvent = {
               id: toolId,
-              toolName: part.toolName || 'unknown',
+              toolName: payload.toolName || 'unknown',
               args: {},
               status: 'completed',
-              result: part.result,
+              result: payload.result,
             };
             sendEvent('tool-result', { toolCall });
           }
@@ -174,24 +180,27 @@ async function runAgentStream(
 
         case 'step-finish': {
           // A step (text generation or tool use) completed
+          const payload = part.payload || {};
           sendEvent('step-finish', {
-            stepType: (part as any).stepType || 'unknown',
-            finishReason: (part as any).finishReason || 'unknown'
+            stepType: payload.stepType || 'unknown',
+            finishReason: payload.finishReason || 'unknown'
           });
           break;
         }
 
         case 'finish': {
           // Stream finished
+          const payload = part.payload || {};
           sendEvent('finish', {
-            finishReason: (part as any).finishReason || 'stop'
+            finishReason: payload.finishReason || 'stop'
           });
           break;
         }
 
         case 'error': {
           // Handle streaming error
-          const errorMsg = (part as any).error?.message || 'Unknown stream error';
+          const payload = part.payload || {};
+          const errorMsg = payload.error?.message || 'Unknown stream error';
           console.error(`[Agent] Stream error:`, errorMsg);
           // Mark any active tool calls as errored
           for (const [id, tc] of activeToolCalls) {
@@ -205,8 +214,10 @@ async function runAgentStream(
         }
 
         default: {
-          // Log unknown event types for debugging
-          console.log(`[Agent] Unknown stream part type: ${(part as any).type}`);
+          // Log unknown event types for debugging (but skip common ones to reduce noise)
+          if (!['start', 'step-start', 'response-metadata'].includes(part.type)) {
+            console.log(`[Agent] Unhandled stream event: ${part.type}`);
+          }
         }
       }
     }

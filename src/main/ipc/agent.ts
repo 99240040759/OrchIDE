@@ -127,31 +127,14 @@ async function runAgentStream(
 
       const part = chunk as any; // Mastra chunks have varied structure
 
-      // Debug: log the full chunk to understand structure
-      if (part.type === 'text-delta' || part.type === 'text-start' || part.type === 'text-end') {
-        console.log(`[Agent] ${part.type}:`, JSON.stringify(part.payload));
-      }
-
       switch (part.type) {
         case 'text-delta': {
-          // Incremental text chunk - payload contains the text
-          const text = part.payload?.textDelta || '';
+          // Incremental text chunk - payload.text contains the actual text
+          const text = part.payload?.text || '';
           if (text) {
             fullTextResponse += text;
             sendEvent('text-delta', { text });
             // Also send legacy chunk for backwards compatibility
-            send('agent:stream-chunk', { sessionId, chunk: text });
-          }
-          break;
-        }
-
-        case 'text-start':
-        case 'text-end': {
-          // These are lifecycle events, might contain text too
-          const text = part.payload?.text || part.payload?.textDelta || '';
-          if (text) {
-            fullTextResponse += text;
-            sendEvent('text-delta', { text });
             send('agent:stream-chunk', { sessionId, chunk: text });
           }
           break;

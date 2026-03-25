@@ -60,9 +60,10 @@ export function createFileTools(workspacePath: string) {
       content: z.string().nullable(),
       error: z.string().nullable(),
     }),
-    execute: async ({ context }) => {
+    execute: async ({ context, ...inputs }: any) => {
+      const { filePath } = inputs;
       try {
-        const safePath = safeResolvePath(workspacePath, context.filePath);
+        const safePath = safeResolvePath(workspacePath, filePath);
         const content = await fs.readFile(safePath, 'utf-8');
         return { content, error: null };
       } catch (e: unknown) {
@@ -86,11 +87,12 @@ export function createFileTools(workspacePath: string) {
       absolutePath: z.string().nullable(),
       error: z.string().nullable(),
     }),
-    execute: async ({ context }) => {
+    execute: async ({ context, ...inputs }: any) => {
+      const { filePath, content } = inputs;
       try {
-        const safePath = safeResolvePath(workspacePath, context.filePath);
+        const safePath = safeResolvePath(workspacePath, filePath);
         await fs.mkdir(path.dirname(safePath), { recursive: true });
-        await fs.writeFile(safePath, context.content, 'utf-8');
+        await fs.writeFile(safePath, content, 'utf-8');
         return { success: true, absolutePath: safePath, error: null };
       } catch (e: unknown) {
         return { success: false, absolutePath: null, error: (e as Error).message };
@@ -115,11 +117,12 @@ export function createFileTools(workspacePath: string) {
       })),
       error: z.string().nullable(),
     }),
-    execute: async ({ context }) => {
+    execute: async ({ context, ...inputs }: any) => {
+      const { dirPath } = inputs;
       try {
-        const safePath = context.dirPath === '.'
+        const safePath = dirPath === '.'
           ? workspacePath
-          : safeResolvePath(workspacePath, context.dirPath);
+          : safeResolvePath(workspacePath, dirPath);
 
         const dirents = await fs.readdir(safePath, { withFileTypes: true });
         const entries = dirents
@@ -155,11 +158,12 @@ export function createFileTools(workspacePath: string) {
       success: z.boolean(),
       error: z.string().nullable(),
     }),
-    execute: async ({ context }) => {
+    execute: async ({ context, ...inputs }: any) => {
+      const { filePath, content } = inputs;
       try {
-        const safePath = safeResolvePath(workspacePath, context.filePath);
+        const safePath = safeResolvePath(workspacePath, filePath);
         await fs.mkdir(path.dirname(safePath), { recursive: true });
-        await fs.writeFile(safePath, context.content ?? '', 'utf-8');
+        await fs.writeFile(safePath, content ?? '', 'utf-8');
         return { success: true, error: null };
       } catch (e: unknown) {
         return { success: false, error: (e as Error).message };
@@ -180,9 +184,10 @@ export function createFileTools(workspacePath: string) {
       success: z.boolean(),
       error: z.string().nullable(),
     }),
-    execute: async ({ context }) => {
+    execute: async ({ context, ...inputs }: any) => {
+      const { targetPath } = inputs;
       try {
-        const safePath = safeResolvePath(workspacePath, context.targetPath);
+        const safePath = safeResolvePath(workspacePath, targetPath);
         const stat = await fs.stat(safePath);
         if (stat.isDirectory()) {
           await fs.rm(safePath, { recursive: true, force: true });
@@ -214,7 +219,8 @@ export function createFileTools(workspacePath: string) {
       })),
       error: z.string().nullable(),
     }),
-    execute: async ({ context }) => {
+    execute: async ({ context, ...inputs }: any) => {
+      const { pattern, fileExtensions } = inputs;
       const matches: { filePath: string; lineNumber: number; line: string }[] = [];
       const maxResults = 100;
 
@@ -234,8 +240,8 @@ export function createFileTools(workspacePath: string) {
               await searchDir(fullPath);
             } else {
               const ext = path.extname(entry.name).slice(1);
-              if (context.fileExtensions && context.fileExtensions.length > 0) {
-                if (!context.fileExtensions.includes(ext)) continue;
+              if (fileExtensions && fileExtensions.length > 0) {
+                if (!fileExtensions.includes(ext)) continue;
               }
 
               try {
@@ -243,7 +249,7 @@ export function createFileTools(workspacePath: string) {
                 const lines = content.split('\n');
 
                 for (let idx = 0; idx < lines.length && matches.length < maxResults; idx++) {
-                  if (lines[idx].includes(context.pattern)) {
+                  if (lines[idx].includes(pattern)) {
                     matches.push({
                       filePath: path.relative(workspacePath, fullPath),
                       lineNumber: idx + 1,

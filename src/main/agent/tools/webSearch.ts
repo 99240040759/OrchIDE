@@ -19,7 +19,8 @@ export const webSearchTool = createTool({
     })),
     answer: z.string().optional(),
   }),
-  execute: async ({ context }) => {
+  execute: async ({ context, ...inputs }: any) => {
+    const { query, maxResults } = inputs;
     const settings = loadSettings();
     const apiKey = settings.TAVILY_API_KEY || process.env.TAVILY_API_KEY;
 
@@ -32,8 +33,8 @@ export const webSearchTool = createTool({
 
     try {
       const client = tavily({ apiKey });
-      const response = await client.search(context.query, {
-        maxResults: context.maxResults ?? 5,
+      const response = await client.search(query, {
+        maxResults: maxResults ?? 5,
         searchDepth: 'advanced',
         includeAnswer: true,
       });

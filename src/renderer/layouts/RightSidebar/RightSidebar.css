@@ -2,66 +2,184 @@
   display: flex;
   flex-direction: column;
   flex: 1;
-  padding: 16px;
+  padding: 14px;
   color: var(--text-color);
-  font-size: 13px;
+  font-size: 12px;
   box-sizing: border-box;
+  overflow-y: auto;
+  gap: 0;
+}
+.right-sidebar-container::-webkit-scrollbar {
+  width: 4px;
+}
+.right-sidebar-container::-webkit-scrollbar-thumb {
+  background: var(--hover-bg);
+  border-radius: 4px;
 }
 
 .rs-section {
-  margin-bottom: 32px;
+  margin-bottom: 24px;
 }
 
 .rs-header {
-  font-size: 11px;
+  font-size: 10px;
+  font-weight: 700;
   color: var(--text-color);
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   display: flex;
   align-items: center;
   gap: 6px;
-  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.7;
 }
 
 .header-icon {
-  opacity: 0.7;
+  opacity: 0.6;
   cursor: pointer;
+  margin-left: auto;
 }
-.header-icon:hover {
-  opacity: 1;
+.header-icon:hover { opacity: 1; }
+
+.rs-empty {
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 2px 0;
 }
+
+/* TASK PROGRESS */
+.progress-bar-container {
+  height: 3px;
+  background: var(--hover-bg);
+  border-radius: 2px;
+  margin-bottom: 10px;
+  position: relative;
+  overflow: visible;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: var(--accent-color);
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+.progress-label {
+  position: absolute;
+  right: 0;
+  top: -16px;
+  font-size: 9px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.task-item-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  line-height: 1.4;
+}
+.task-item-entry.depth-1 { padding-left: 14px; }
+.task-item-entry.depth-2 { padding-left: 24px; }
 
 .rs-item {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 8px;
   line-height: 1.4;
+  border-radius: 5px;
+  padding: 2px 4px;
+  transition: background-color 0.1s;
 }
 
 .item-icon {
-  opacity: 0.6;
-  margin-top: 2px;
+  opacity: 0.5;
+  margin-top: 1px;
   flex-shrink: 0;
 }
-
-.item-icon.accent {
+.item-icon.accent { color: var(--accent-color); opacity: 1; }
+.item-icon.check { color: #2EA043; opacity: 1; }
+.item-icon.spin {
+  animation: spin 1.2s linear infinite;
   color: var(--accent-color);
-  opacity: 1;
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .item-text {
   flex: 1;
-}
-
-.item-text.line-through {
-  text-decoration: line-through;
-}
-
-.item-text.bold {
-  font-weight: 500;
-  color: var(--text-color);
-}
-
-.text-muted {
   color: var(--text-muted);
+  font-size: 12px;
 }
+.item-text.bold { font-weight: 500; color: var(--text-color); }
+.item-text.done { text-decoration: line-through; opacity: 0.5; color: var(--text-muted); }
+
+.text-muted { color: var(--text-muted); }
+
+/* ARTIFACTS */
+.artifact-item {
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  gap: 8px;
+  align-items: center;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+.artifact-item:hover {
+  background: var(--hover-bg);
+  border-color: var(--border-color);
+}
+.artifact-icon {
+  color: var(--accent-color);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.artifact-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.artifact-type {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: capitalize;
+}
+
+/* FILES CHANGED */
+.file-change-item {
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 5px;
+  gap: 6px;
+  align-items: center;
+}
+.file-change-item:hover {
+  background: var(--hover-bg);
+}
+.file-change-status {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.status-icon.added { color: #2EA043; }
+.status-icon.modified { color: var(--accent-color); }
+.status-icon.deleted { color: #F85149; }
+.file-change-name {
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.file-change-name.added { color: #2EA043; }
+.file-change-name.modified { color: var(--text-color); }
+.file-change-name.deleted { color: #F85149; text-decoration: line-through; }

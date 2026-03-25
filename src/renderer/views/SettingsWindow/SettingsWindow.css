@@ -202,3 +202,85 @@
 .dropdown-btn:hover {
   background-color: var(--hover-bg);
 }
+
+/* API Key Inputs */
+.api-key-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-top: 10px;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+.api-key-input-wrapper:focus-within {
+  border-color: var(--accent-color);
+}
+.api-key-input-wrapper .api-key-input {
+  border: none;
+  border-radius: 0;
+  flex: 1;
+}
+
+.api-key-input {
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  color: var(--text-color);
+  font-size: 13px;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  padding: 8px 12px;
+  width: 100%;
+  margin-top: 10px;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+.api-key-input:focus {
+  border-color: var(--accent-color);
+}
+.api-key-input::placeholder {
+  color: var(--input-placeholder);
+  font-family: inherit;
+}
+
+.key-toggle-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  transition: color 0.1s;
+}
+.key-toggle-btn:hover { color: var(--text-color); }
+
+.save-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -20px;
+  margin-bottom: 24px;
+}
+
+.save-btn {
+  background: var(--accent-color);
+  border: none;
+  color: #fff;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 500;
+  padding: 8px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background-color 0.2s;
+}
+.save-btn:hover { background: #026EC1; }
+.save-btn.saved { background: #2EA043; }
+
+.sc-card + .sc-card { margin-top: 8px; }

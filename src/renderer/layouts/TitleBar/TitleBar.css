@@ -25,9 +25,11 @@
   color: var(--text-color);
 }
 
-.title-muted {
-  color: var(--text-muted);
-}
+.title-muted { color: var(--text-muted); }
+.title-sep { color: var(--text-muted); margin: 0 4px; }
+.title-workspace { color: var(--text-color); font-weight: 600; }
+.title-task { color: var(--text-muted); font-weight: 400; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle; }
+.title-orch { color: var(--text-color); letter-spacing: 0.3px; }
 
 .titlebar-actions {
   display: flex;

@@ -1,9 +1,55 @@
+/**
+ * File operation tools for the AI agent
+ * Uses secure path handling to prevent path traversal attacks
+ * All operations are async to prevent blocking the event loop
+ */
+
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import fs from 'node:fs';
+import fs from 'node:fs/promises';
 import path from 'node:path';
 
+/**
+ * SECURITY: Safely resolve a file path within a workspace
+ * Prevents path traversal attacks by ensuring the resolved path
+ * is within the workspace directory
+ */
+function safeResolvePath(workspacePath: string, filePath: string): string {
+  const normalizedWorkspace = path.resolve(workspacePath);
+
+  // Always treat as relative - reject absolute paths from agent
+  let targetPath: string;
+  if (path.isAbsolute(filePath)) {
+    // Convert absolute path attempts to relative by stripping leading separators
+    const relativized = filePath.replace(/^[/\\]+/, '');
+    targetPath = path.resolve(normalizedWorkspace, relativized);
+  } else {
+    targetPath = path.resolve(normalizedWorkspace, filePath);
+  }
+
+  targetPath = path.normalize(targetPath);
+
+  // Security check: ensure resolved path is within workspace
+  if (!targetPath.startsWith(normalizedWorkspace + path.sep) && targetPath !== normalizedWorkspace) {
+    throw new Error(`Access denied: path "${filePath}" is outside workspace`);
+  }
+
+  return targetPath;
+}
+
+/**
+ * Check if a file/folder name should be ignored
+ */
+function shouldIgnore(name: string): boolean {
+  if (name.startsWith('.')) return true;
+  const ignored = new Set(['node_modules', '__pycache__', 'dist', 'build', '.git']);
+  return ignored.has(name);
+}
+
 export function createFileTools(workspacePath: string) {
+  /**
+   * Read file tool - securely reads files within workspace only
+   */
   const readFileTool = createTool({
     id: 'readFile',
     description: 'Read the contents of a file in the workspace. Use relative paths from workspace root.',
@@ -16,20 +62,21 @@ export function createFileTools(workspacePath: string) {
     }),
     execute: async ({ context }) => {
       try {
-        const absPath = path.isAbsolute(context.filePath)
-          ? context.filePath
-          : path.join(workspacePath, context.filePath);
-        const content = fs.readFileSync(absPath, 'utf-8');
-        return { content, error: null as string | null };
+        const safePath = safeResolvePath(workspacePath, context.filePath);
+        const content = await fs.readFile(safePath, 'utf-8');
+        return { content, error: null };
       } catch (e: unknown) {
         return { content: null, error: (e as Error).message };
       }
     },
   });
 
+  /**
+   * Write file tool - securely writes files within workspace only
+   */
   const writeFileTool = createTool({
     id: 'writeFile',
-    description: 'Write or overwrite content to a file in the workspace. Creates the file and parent directories if they do not exist.',
+    description: 'Write or overwrite content to a file in the workspace. Creates the file and parent directories if they do not exist. Use relative paths only.',
     inputSchema: z.object({
       filePath: z.string().describe('Relative path to the file from workspace root'),
       content: z.string().describe('The full content to write to the file'),
@@ -41,18 +88,19 @@ export function createFileTools(workspacePath: string) {
     }),
     execute: async ({ context }) => {
       try {
-        const absPath = path.isAbsolute(context.filePath)
-          ? context.filePath
-          : path.join(workspacePath, context.filePath);
-        fs.mkdirSync(path.dirname(absPath), { recursive: true });
-        fs.writeFileSync(absPath, context.content, 'utf-8');
-        return { success: true, absolutePath: absPath, error: null as string | null };
+        const safePath = safeResolvePath(workspacePath, context.filePath);
+        await fs.mkdir(path.dirname(safePath), { recursive: true });
+        await fs.writeFile(safePath, context.content, 'utf-8');
+        return { success: true, absolutePath: safePath, error: null };
       } catch (e: unknown) {
         return { success: false, absolutePath: null, error: (e as Error).message };
       }
     },
   });
 
+  /**
+   * List directory tool - lists files within workspace
+   */
   const listDirectoryTool = createTool({
     id: 'listDirectory',
     description: 'List files and directories at a given path within the workspace.',
@@ -69,26 +117,36 @@ export function createFileTools(workspacePath: string) {
     }),
     execute: async ({ context }) => {
       try {
-        const absPath = context.dirPath === '.'
+        const safePath = context.dirPath === '.'
           ? workspacePath
-          : path.join(workspacePath, context.dirPath);
-        const entries = fs.readdirSync(absPath, { withFileTypes: true })
-          .filter(e => !e.name.startsWith('.') && e.name !== 'node_modules')
+          : safeResolvePath(workspacePath, context.dirPath);
+
+        const dirents = await fs.readdir(safePath, { withFileTypes: true });
+        const entries = dirents
+          .filter(e => !shouldIgnore(e.name))
           .map(e => ({
             name: e.name,
             isDir: e.isDirectory(),
-            ext: e.isDirectory() ? undefined : path.extname(e.name).slice(1),
-          }));
-        return { entries, error: null as string | null };
+            ext: e.isDirectory() ? undefined : path.extname(e.name).slice(1) || undefined,
+          }))
+          .sort((a, b) => {
+            if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+            return a.name.localeCompare(b.name);
+          });
+
+        return { entries, error: null };
       } catch (e: unknown) {
         return { entries: [], error: (e as Error).message };
       }
     },
   });
 
+  /**
+   * Create file tool - creates new files within workspace
+   */
   const createFileTool = createTool({
     id: 'createFile',
-    description: 'Create a new file (empty or with initial content) in the workspace.',
+    description: 'Create a new file (empty or with initial content) in the workspace. Use relative paths only.',
     inputSchema: z.object({
       filePath: z.string().describe('Relative path to new file from workspace root'),
       content: z.string().optional().default('').describe('Initial content for the file'),
@@ -99,19 +157,22 @@ export function createFileTools(workspacePath: string) {
     }),
     execute: async ({ context }) => {
       try {
-        const absPath = path.join(workspacePath, context.filePath);
-        fs.mkdirSync(path.dirname(absPath), { recursive: true });
-        fs.writeFileSync(absPath, context.content ?? '', 'utf-8');
+        const safePath = safeResolvePath(workspacePath, context.filePath);
+        await fs.mkdir(path.dirname(safePath), { recursive: true });
+        await fs.writeFile(safePath, context.content ?? '', 'utf-8');
         return { success: true, error: null };
-      } catch (e: any) {
-        return { success: false, error: e.message };
+      } catch (e: unknown) {
+        return { success: false, error: (e as Error).message };
       }
     },
   });
 
+  /**
+   * Delete file tool - securely deletes files within workspace only
+   */
   const deleteFileTool = createTool({
     id: 'deleteFile',
-    description: 'Delete a file or directory from the workspace.',
+    description: 'Delete a file or directory from the workspace. Use relative paths only.',
     inputSchema: z.object({
       targetPath: z.string().describe('Relative path from workspace root to delete'),
     }),
@@ -121,20 +182,23 @@ export function createFileTools(workspacePath: string) {
     }),
     execute: async ({ context }) => {
       try {
-        const absPath = path.join(workspacePath, context.targetPath);
-        const stat = fs.statSync(absPath);
+        const safePath = safeResolvePath(workspacePath, context.targetPath);
+        const stat = await fs.stat(safePath);
         if (stat.isDirectory()) {
-          fs.rmSync(absPath, { recursive: true, force: true });
+          await fs.rm(safePath, { recursive: true, force: true });
         } else {
-          fs.unlinkSync(absPath);
+          await fs.unlink(safePath);
         }
         return { success: true, error: null };
-      } catch (e: any) {
-        return { success: false, error: e.message };
+      } catch (e: unknown) {
+        return { success: false, error: (e as Error).message };
       }
     },
   });
 
+  /**
+   * Search in files tool - searches for text patterns within workspace
+   */
   const searchInFilesTool = createTool({
     id: 'searchInFiles',
     description: 'Search for a text pattern across all files in the workspace. Returns matching lines with file paths.',
@@ -152,40 +216,66 @@ export function createFileTools(workspacePath: string) {
     }),
     execute: async ({ context }) => {
       const matches: { filePath: string; lineNumber: number; line: string }[] = [];
+      const maxResults = 100;
 
-      function searchDir(dir: string) {
+      async function searchDir(dir: string): Promise<void> {
+        if (matches.length >= maxResults) return;
+
         try {
-          const entries = fs.readdirSync(dir, { withFileTypes: true });
+          const entries = await fs.readdir(dir, { withFileTypes: true });
+
           for (const entry of entries) {
-            if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+            if (matches.length >= maxResults) break;
+            if (shouldIgnore(entry.name)) continue;
+
             const fullPath = path.join(dir, entry.name);
+
             if (entry.isDirectory()) {
-              searchDir(fullPath);
+              await searchDir(fullPath);
             } else {
               const ext = path.extname(entry.name).slice(1);
-              if (context.fileExtensions && !context.fileExtensions.includes(ext)) continue;
+              if (context.fileExtensions && context.fileExtensions.length > 0) {
+                if (!context.fileExtensions.includes(ext)) continue;
+              }
+
               try {
-                const content = fs.readFileSync(fullPath, 'utf-8');
+                const content = await fs.readFile(fullPath, 'utf-8');
                 const lines = content.split('\n');
-                lines.forEach((line, idx) => {
-                  if (line.includes(context.pattern)) {
+
+                for (let idx = 0; idx < lines.length && matches.length < maxResults; idx++) {
+                  if (lines[idx].includes(context.pattern)) {
                     matches.push({
                       filePath: path.relative(workspacePath, fullPath),
                       lineNumber: idx + 1,
-                      line: line.trim(),
+                      line: lines[idx].trim().slice(0, 200), // Limit line length
                     });
                   }
-                });
-              } catch {}
+                }
+              } catch {
+                // Skip files that can't be read (binary, permissions, etc.)
+              }
             }
           }
-        } catch {}
+        } catch {
+          // Skip directories that can't be read
+        }
       }
 
-      searchDir(workspacePath);
-      return { matches: matches.slice(0, 100), error: null as string | null };
+      try {
+        await searchDir(workspacePath);
+        return { matches, error: null };
+      } catch (e: unknown) {
+        return { matches: [], error: (e as Error).message };
+      }
     },
   });
 
-  return { readFileTool, writeFileTool, listDirectoryTool, createFileTool, deleteFileTool, searchInFilesTool };
+  return {
+    readFileTool,
+    writeFileTool,
+    listDirectoryTool,
+    createFileTool,
+    deleteFileTool,
+    searchInFilesTool,
+  };
 }

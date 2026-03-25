@@ -1,3 +1,8 @@
+/**
+ * Mastra Agent Factory
+ * Creates OrchIDE Agent instances with proper tool configuration
+ */
+
 import { Agent } from '@mastra/core/agent';
 import { createOpenAI } from '@ai-sdk/openai';
 import { webSearchTool } from './tools/webSearch';
@@ -5,22 +10,37 @@ import { createFileTools } from './tools/fileTools';
 import { createTaskTool, createArtifactTool, createFileChangedTool } from './tools/agentTools';
 import { loadSettings } from '../appdata';
 
-export function createOrchAgent(params: {
+interface CreateAgentParams {
   sessionId: string;
   workspacePath?: string;
   workspaceName?: string;
-}) {
+}
+
+/**
+ * Create an OrchIDE Agent instance
+ * @throws Error if API key is not configured
+ */
+export function createOrchAgent(params: CreateAgentParams): Agent {
   const settings = loadSettings();
-  const nimApiKey = settings.NVIDIA_NIM_API_KEY || process.env.NVIDIA_NIM_API_KEY || '';
+  const nimApiKey = settings.NVIDIA_NIM_API_KEY || process.env.NVIDIA_NIM_API_KEY;
   const modelId = settings.NVIDIA_NIM_MODEL || 'meta/llama-3.3-70b-instruct';
 
+  // Validate API key
+  if (!nimApiKey) {
+    throw new Error(
+      'NVIDIA NIM API key not configured. Please add your API key in Settings.'
+    );
+  }
+
+  // Create OpenAI-compatible client for NVIDIA NIM
   const nim = createOpenAI({
     baseURL: 'https://integrate.api.nvidia.com/v1',
-    apiKey: nimApiKey || 'placeholder',
+    apiKey: nimApiKey,
   });
 
   const isAgenticMode = !!params.workspacePath;
 
+  // Configure tools based on mode
   const tools: Record<string, any> = {
     webSearch: webSearchTool,
     updateTaskProgress: createTaskTool(params.sessionId),
@@ -28,16 +48,20 @@ export function createOrchAgent(params: {
     reportFileChanged: createFileChangedTool(params.sessionId),
   };
 
+  // Add file tools in agentic mode
   if (isAgenticMode && params.workspacePath) {
     const fileTools = createFileTools(params.workspacePath);
-    tools.readFile = fileTools.readFileTool;
-    tools.writeFile = fileTools.writeFileTool;
-    tools.listDirectory = fileTools.listDirectoryTool;
-    tools.createFile = fileTools.createFileTool;
-    tools.deleteFile = fileTools.deleteFileTool;
-    tools.searchInFiles = fileTools.searchInFilesTool;
+    Object.assign(tools, {
+      readFile: fileTools.readFileTool,
+      writeFile: fileTools.writeFileTool,
+      listDirectory: fileTools.listDirectoryTool,
+      createFile: fileTools.createFileTool,
+      deleteFile: fileTools.deleteFileTool,
+      searchInFiles: fileTools.searchInFilesTool,
+    });
   }
 
+  // Build context-aware system prompt
   const workspaceContext = isAgenticMode
     ? `\n\nWorkspace: "${params.workspaceName || params.workspacePath}"
 Workspace Path: ${params.workspacePath}

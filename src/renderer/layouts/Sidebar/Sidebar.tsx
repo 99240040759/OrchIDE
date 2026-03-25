@@ -1,107 +1,135 @@
-import React, { useState, useEffect, useRef } from 'react';
+/**
+ * Sidebar component - Chat history, workspace management, and navigation
+ * Cleaned up unused code and improved organization
+ */
+
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Plus, History, ChevronDown, ChevronRight, Info, BookOpen,
-  Globe, Settings, MessageSquare, Folder, FolderOpen, Trash2, FileText
+  Plus, History, ChevronDown, Info, BookOpen,
+  Globe, Settings, MessageSquare, FolderOpen, Trash2
 } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { useAgentStore } from '../../store/agentStore';
 import { v4 as uuidv4 } from 'uuid';
 import { FileExplorer } from '../../components/FileExplorer/FileExplorer';
+import { getFilename } from '../../../shared/utils/pathUtils';
+import type { SessionItem } from '../../../shared/types';
 import './Sidebar.css';
-
-interface SessionItem {
-  id: string;
-  title: string;
-  updated_at: number;
-}
-
-interface WorkspaceHistory {
-  path: string;
-  name: string;
-  sessions: SessionItem[];
-  expanded: boolean;
-}
 
 const orchide = (window as any).orchide;
 
-export const Sidebar = () => {
-  const { setSessionId, setMessages, sessionId } = useChatStore();
-  const { activeWorkspace, setWorkspace } = useWorkspaceStore();
-  const { clearForSession, setArtifacts, setFilesChanged, updateTaskMd } = useAgentStore();
+export const Sidebar: React.FC = () => {
+  const setSessionId = useChatStore(state => state.setSessionId);
+  const setMessages = useChatStore(state => state.setMessages);
+  const sessionId = useChatStore(state => state.sessionId);
+
+  const activeWorkspace = useWorkspaceStore(state => state.activeWorkspace);
+  const setWorkspace = useWorkspaceStore(state => state.setWorkspace);
+
+  const clearForSession = useAgentStore(state => state.clearForSession);
+  const setArtifacts = useAgentStore(state => state.setArtifacts);
+  const setFilesChanged = useAgentStore(state => state.setFilesChanged);
+  const updateTaskMd = useAgentStore(state => state.updateTaskMd);
 
   const [chatSessions, setChatSessions] = useState<SessionItem[]>([]);
-  const [workspaceHistories, setWorkspaceHistories] = useState<WorkspaceHistory[]>([]);
-  const [activeSection, setActiveSection] = useState<'chat' | 'workspaces'>('chat');
   const [showChatHistory, setShowChatHistory] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
 
+  // Load chat history on mount
   useEffect(() => {
     loadChatHistory();
   }, []);
 
-  const loadChatHistory = async () => {
+  const loadChatHistory = useCallback(async () => {
     if (!orchide) return;
     const sessions = await orchide.history.getChats();
     setChatSessions(sessions || []);
-  };
+  }, []);
 
-  const loadWorkspaceHistory = async (workspacePath: string) => {
-    if (!orchide) return;
-    const sessions = await orchide.history.getWorkspaceSessions(workspacePath);
-    return sessions || [];
-  };
-
-  const startNewChat = () => {
+  const startNewChat = useCallback(() => {
     const newId = uuidv4();
     setSessionId(newId);
     setMessages([]);
     clearForSession();
     loadChatHistory();
-  };
+  }, [setSessionId, setMessages, clearForSession, loadChatHistory]);
 
-  const openWorkspace = async () => {
+  const openWorkspace = useCallback(async () => {
     if (!orchide) return;
     const folderPath = await orchide.fs.openDialog();
     if (!folderPath) return;
-    const name = folderPath.split('/').pop() || folderPath.split('\\').pop() || folderPath;
+
+    // Extract workspace name from path (handles both / and \)
+    const name = getFilename(folderPath) || folderPath;
+
     setWorkspace({ path: folderPath, name });
+
     // Start watcher
     await orchide.watcher.start(folderPath);
+
     // Start new agentic session
     const newId = uuidv4();
     setSessionId(newId);
     setMessages([]);
     clearForSession();
-  };
+  }, [setWorkspace, setSessionId, setMessages, clearForSession]);
 
-  const openHistorySession = async (sessId: string) => {
+  const closeWorkspace = useCallback(async () => {
+    await orchide?.watcher.stop();
+    setWorkspace(null);
+    startNewChat();
+  }, [setWorkspace, startNewChat]);
+
+  const openHistorySession = useCallback(async (sessId: string) => {
     setSessionId(sessId);
     clearForSession();
+
     if (!orchide) return;
+
+    // Load messages
     const msgs = await orchide.history.getMessages(sessId);
     const mapped = (msgs || []).map((m: any) => ({
-      id: m.id, role: m.role, content: m.content, timestamp: m.timestamp,
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      timestamp: m.timestamp,
     }));
     setMessages(mapped);
+
     // Restore agent state
     const taskMd = await orchide.history.getTaskProgress(sessId);
     if (taskMd) updateTaskMd(taskMd);
-    const artifacts = await orchide.history.getArtifacts(sessId);
-    if (artifacts) setArtifacts(artifacts.map((a: any) => ({ ...a, sessionId: a.session_id })));
-    const filesChanged = await orchide.history.getFilesChanged(sessId);
-    if (filesChanged) setFilesChanged(filesChanged.map((f: any) => ({ id: f.id, filePath: f.file_path, status: f.status })));
-  };
 
-  const deleteSession = async (sessId: string, e: React.MouseEvent) => {
+    const artifacts = await orchide.history.getArtifacts(sessId);
+    if (artifacts) {
+      setArtifacts(artifacts.map((a: any) => ({
+        ...a,
+        sessionId: a.session_id || a.sessionId,
+      })));
+    }
+
+    const filesChanged = await orchide.history.getFilesChanged(sessId);
+    if (filesChanged) {
+      setFilesChanged(filesChanged.map((f: any) => ({
+        id: f.id,
+        filePath: f.file_path || f.filePath,
+        status: f.status,
+      })));
+    }
+  }, [setSessionId, clearForSession, setMessages, updateTaskMd, setArtifacts, setFilesChanged]);
+
+  const deleteSession = useCallback(async (sessId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!orchide) return;
-    await orchide.history.deleteSession(sessId);
-    if (sessId === sessionId) startNewChat();
-    loadChatHistory();
-  };
 
-  const formatTime = (ts: number) => {
+    await orchide.history.deleteSession(sessId);
+    if (sessId === sessionId) {
+      startNewChat();
+    }
+    loadChatHistory();
+  }, [sessionId, startNewChat, loadChatHistory]);
+
+  const formatTime = (ts: number): string => {
     const diff = Date.now() - ts;
     const m = Math.floor(diff / 60000);
     if (m < 60) return `${m}m`;
@@ -158,10 +186,7 @@ export const Sidebar = () => {
                   <Plus size={14} />
                 </span>
               </div>
-              <div
-                className="workspace-item section-expandable open-workspace-hint"
-                onClick={openWorkspace}
-              >
+              <div className="workspace-item section-expandable open-workspace-hint" onClick={openWorkspace}>
                 <FolderOpen size={14} className="folder-icon" />
                 <span>Open a Folder...</span>
               </div>
@@ -186,11 +211,7 @@ export const Sidebar = () => {
                 <span className="workspace-active-name">{activeWorkspace.name}</span>
                 <button
                   className="close-workspace-btn"
-                  onClick={async () => {
-                    await orchide?.watcher.stop();
-                    setWorkspace(null);
-                    startNewChat();
-                  }}
+                  onClick={closeWorkspace}
                   title="Close Workspace"
                 >
                   ✕
@@ -242,6 +263,9 @@ export const Sidebar = () => {
   );
 };
 
+/**
+ * Workspace Session List sub-component
+ */
 const WorkspaceSessionList: React.FC<{
   workspacePath: string;
   currentSessionId: string;
@@ -252,12 +276,13 @@ const WorkspaceSessionList: React.FC<{
   const [sessions, setSessions] = useState<SessionItem[]>([]);
 
   useEffect(() => {
-    const orchide = (window as any).orchide;
     if (!orchide || !workspacePath) return;
-    orchide.history.getWorkspaceSessions(workspacePath).then((s: any[]) => setSessions(s || []));
+    orchide.history.getWorkspaceSessions(workspacePath).then((s: SessionItem[]) => setSessions(s || []));
   }, [workspacePath, currentSessionId]);
 
-  if (sessions.length === 0) return <div className="empty-state">No sessions yet</div>;
+  if (sessions.length === 0) {
+    return <div className="empty-state">No sessions yet</div>;
+  }
 
   return (
     <>

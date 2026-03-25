@@ -1,74 +1,101 @@
+/**
+ * EditorPanel component - Monaco code editor with tabs
+ * File watching for external changes is handled centrally in index.tsx
+ */
+
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import MonacoEditor from '@monaco-editor/react';
-import { X, ChevronLeft, ChevronRight, FileText, Download, Search } from 'lucide-react';
-import { useWorkspaceStore, OpenFile } from '../../store/workspaceStore';
-import { useAgentStore } from '../../store/agentStore';
+import { X, ChevronLeft, ChevronRight, FileText, Download } from 'lucide-react';
+import { useWorkspaceStore } from '../../store/workspaceStore';
+import { getLanguageFromFilename } from '../../../shared/utils/languageUtils';
 import './EditorPanel.css';
 
 const orchide = (window as any).orchide;
 
 const AUTOSAVE_DELAY = 700;
 
-function getLanguage(name: string): string {
-  const ext = name.split('.').pop()?.toLowerCase() || '';
-  const map: Record<string, string> = {
-    ts: 'typescript', tsx: 'typescript', js: 'javascript', jsx: 'javascript',
-    css: 'css', html: 'html', json: 'json', md: 'markdown', py: 'python',
-    rs: 'rust', go: 'go', sh: 'shell', yml: 'yaml', yaml: 'yaml',
-    toml: 'toml', txt: 'plaintext', xml: 'xml', c: 'c', cpp: 'cpp',
-    java: 'java', rb: 'ruby', php: 'php', swift: 'swift', kt: 'kotlin',
-  };
-  return map[ext] || 'plaintext';
-}
-
 export const EditorPanel: React.FC = () => {
-  const { openFiles, activeFilePath, closeFile, setActiveFile, updateFileContent } = useWorkspaceStore();
-  const { addFileChange } = useAgentStore();
+  const openFiles = useWorkspaceStore(state => state.openFiles);
+  const activeFilePath = useWorkspaceStore(state => state.activeFilePath);
+  const closeFile = useWorkspaceStore(state => state.closeFile);
+  const setActiveFile = useWorkspaceStore(state => state.setActiveFile);
+  const updateFileContent = useWorkspaceStore(state => state.updateFileContent);
+
   const saveTimers = useRef<Map<string, NodeJS.Timeout>>(new Map());
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const pendingContent = useRef<Map<string, string>>(new Map());
 
   const activeFile = openFiles.find(f => f.path === activeFilePath) || null;
 
+  // Handle content change with debounced autosave
   const handleChange = useCallback((newContent: string | undefined, filePath: string) => {
     if (newContent === undefined) return;
+
+    // Store the latest content for this file
+    pendingContent.current.set(filePath, newContent);
+
+    // Update UI immediately (mark as dirty)
     updateFileContent(filePath, newContent, true);
 
     // Clear previous timer and set new autosave
     const existing = saveTimers.current.get(filePath);
     if (existing) clearTimeout(existing);
-    const t = setTimeout(async () => {
-      const result = await orchide?.fs.writeFile(filePath, newContent);
-      if (!result?.error) {
-        updateFileContent(filePath, newContent, false);
-      }
-    }, AUTOSAVE_DELAY);
-    saveTimers.current.set(filePath, t);
-  }, [updateFileContent]);
 
-  // Watcher integration: reload if file changed externally
-  useEffect(() => {
-    if (!orchide) return;
-    orchide.watcher.onEvent(async (event: { type: string; path: string }) => {
-      if (event.type === 'change') {
-        const openFile = openFiles.find(f => f.path === event.path);
-        if (openFile) {
-          const result = await orchide.fs.readFile(event.path);
-          if (result?.content !== null) {
-            updateFileContent(event.path, result.content, false);
-          }
+    const timer = setTimeout(async () => {
+      // Get the latest content (may have changed since timer was set)
+      const contentToSave = pendingContent.current.get(filePath);
+      if (contentToSave === undefined) return;
+
+      const result = await orchide?.fs.writeFile(filePath, contentToSave);
+      if (!result?.error) {
+        // Only mark as clean if the saved content matches what's currently pending
+        const currentPending = pendingContent.current.get(filePath);
+        if (currentPending === contentToSave) {
+          useWorkspaceStore.getState().updateFileContent(filePath, contentToSave, false);
+          pendingContent.current.delete(filePath);
         }
       }
-    });
-    return () => orchide.watcher.offEvent();
-  }, [openFiles, updateFileContent]);
+    }, AUTOSAVE_DELAY);
 
-  // Cleanup timers
+    saveTimers.current.set(filePath, timer);
+  }, [updateFileContent]);
+
+  // Cleanup timers on unmount
   useEffect(() => {
     return () => {
       saveTimers.current.forEach(t => clearTimeout(t));
+      saveTimers.current.clear();
+      pendingContent.current.clear();
     };
   }, []);
 
+  // Navigation handlers
+  const goToPreviousFile = useCallback(() => {
+    const idx = activeFilePath ? openFiles.findIndex(f => f.path === activeFilePath) : -1;
+    if (idx > 0) {
+      setActiveFile(openFiles[idx - 1].path);
+    }
+  }, [activeFilePath, openFiles, setActiveFile]);
+
+  const goToNextFile = useCallback(() => {
+    const idx = activeFilePath ? openFiles.findIndex(f => f.path === activeFilePath) : -1;
+    if (idx >= 0 && idx < openFiles.length - 1) {
+      setActiveFile(openFiles[idx + 1].path);
+    }
+  }, [activeFilePath, openFiles, setActiveFile]);
+
+  // Download handler
+  const handleDownload = useCallback(() => {
+    if (!activeFile) return;
+    const blob = new Blob([activeFile.content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = activeFile.name;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [activeFile]);
+
+  // Monaco theme configuration
   const monacoTheme = {
     base: 'vs-dark' as const,
     inherit: true,
@@ -97,36 +124,17 @@ export const EditorPanel: React.FC = () => {
     <div className="editor-container">
       <div className="editor-header">
         <div className="eh-left">
-          <button className="eh-icon-btn" onClick={() => {
-            const idx = activeFilePath ? openFiles.findIndex(f => f.path === activeFilePath) : -1;
-            if (idx > 0) setActiveFile(openFiles[idx - 1].path);
-          }}>
+          <button className="eh-icon-btn" onClick={goToPreviousFile} title="Previous file">
             <ChevronLeft size={15} />
           </button>
-          <button className="eh-icon-btn" onClick={() => {
-            const idx = activeFilePath ? openFiles.findIndex(f => f.path === activeFilePath) : -1;
-            if (idx >= 0 && idx < openFiles.length - 1) setActiveFile(openFiles[idx + 1].path);
-          }}>
+          <button className="eh-icon-btn" onClick={goToNextFile} title="Next file">
             <ChevronRight size={15} />
           </button>
         </div>
 
         <div className="eh-right">
-          <button className="eh-icon-btn" onClick={() => setIsSearchOpen(!isSearchOpen)} title="Search (Cmd+F)">
-            <Search size={13} />
-          </button>
           {activeFile && (
-            <button
-              className="eh-icon-btn"
-              title="Download file"
-              onClick={() => {
-                const blob = new Blob([activeFile.content], { type: 'text/plain' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url; a.download = activeFile.name; a.click();
-                URL.revokeObjectURL(url);
-              }}
-            >
+            <button className="eh-icon-btn" title="Download file" onClick={handleDownload}>
               <Download size={13} />
             </button>
           )}
@@ -163,7 +171,7 @@ export const EditorPanel: React.FC = () => {
           <MonacoEditor
             key={activeFile.path}
             height="100%"
-            language={activeFile.language || getLanguage(activeFile.name)}
+            language={activeFile.language || getLanguageFromFilename(activeFile.name)}
             value={activeFile.content}
             theme="orch-dark"
             beforeMount={(monaco) => {

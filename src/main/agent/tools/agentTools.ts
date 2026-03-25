@@ -4,7 +4,6 @@ import { BrowserWindow } from 'electron';
 import { upsertTaskProgress, insertArtifact, upsertFileChanged } from '../../db';
 import { writeSessionFile } from '../../appdata';
 import { v4 as uuidv4 } from 'uuid';
-import path from 'node:path';
 
 function broadcastToAll(channel: string, data: any) {
   BrowserWindow.getAllWindows().forEach(w => {

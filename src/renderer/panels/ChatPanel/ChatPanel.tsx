@@ -1,12 +1,18 @@
+/**
+ * ChatPanel component - Main chat interface with message display
+ * Handles both empty state and conversation thread views
+ */
+
 import React, { useEffect, useRef } from 'react';
-import { Bot, User, Loader2 } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { InputBar } from '../InputBar/InputBar';
 import './ChatPanel.css';
 
+/**
+ * Simple markdown to HTML renderer (no external dependencies)
+ */
 function renderMarkdown(text: string): string {
-  // Simple markdown → HTML (no external dep)
   return text
     // Code blocks
     .replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code class="code-block" data-lang="$1">$2</code></pre>')
@@ -35,11 +41,16 @@ function renderMarkdown(text: string): string {
     .replace(/\n/g, '<br/>');
 }
 
-export const ChatPanel = () => {
-  const { messages, isStreaming, streamingContent, sessionId } = useChatStore();
-  const { activeWorkspace } = useWorkspaceStore();
+export const ChatPanel: React.FC = () => {
+  const messages = useChatStore(state => state.messages);
+  const isStreaming = useChatStore(state => state.isStreaming);
+  const streamingContent = useChatStore(state => state.streamingContent);
+
+  const activeWorkspace = useWorkspaceStore(state => state.activeWorkspace);
+
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  // Auto-scroll to bottom on new messages
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingContent]);
@@ -109,9 +120,7 @@ export const ChatPanel = () => {
                       dangerouslySetInnerHTML={{ __html: renderMarkdown(streamingContent) }}
                     />
                   ) : (
-                    <div className="thinking-shine">
-                      Thinking
-                    </div>
+                    <div className="thinking-shine">Thinking</div>
                   )}
                 </div>
               </div>

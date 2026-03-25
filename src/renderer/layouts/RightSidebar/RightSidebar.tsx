@@ -1,11 +1,19 @@
-import React from 'react';
+/**
+ * RightSidebar component - Task progress, artifacts, and file changes
+ * Uses shared utilities for language detection
+ */
+
+import React, { useCallback } from 'react';
 import {
   ExternalLink, Info, CheckCircle2, Circle, Loader2,
-  FileText, ListTodo, BookOpen, Map, FilePlus2,
+  FileText, ListTodo, BookOpen, Map,
   Plus, Minus, Edit3
 } from 'lucide-react';
 import { useAgentStore } from '../../store/agentStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
+import { useLayoutStore } from '../../store/layoutStore';
+import { getLanguageFromFilename } from '../../../shared/utils/languageUtils';
+import { getFilename } from '../../../shared/utils/pathUtils';
 import './RightSidebar.css';
 
 const ARTIFACT_ICONS: Record<string, React.ReactNode> = {
@@ -23,38 +31,53 @@ const FILE_STATUS_ICONS: Record<string, React.ReactNode> = {
 
 const orchide = (window as any).orchide;
 
-export const RightSidebar = () => {
-  const { taskTitle, taskItems, artifacts, filesChanged } = useAgentStore();
-  const { openFile } = useWorkspaceStore();
+export const RightSidebar: React.FC = () => {
+  const taskTitle = useAgentStore(state => state.taskTitle);
+  const taskItems = useAgentStore(state => state.taskItems);
+  const artifacts = useAgentStore(state => state.artifacts);
+  const filesChanged = useAgentStore(state => state.filesChanged);
+
+  const openFile = useWorkspaceStore(state => state.openFile);
 
   const completedCount = taskItems.filter(t => t.status === 'done').length;
   const totalCount = taskItems.length;
   const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
-  const openArtifact = async (filePath: string, name: string) => {
+  // Open an artifact file
+  const openArtifact = useCallback(async (filePath: string, name: string) => {
     if (!orchide) return;
-    const result = await orchide.fs.readFile(filePath);
-    if (result?.content !== null && result?.content !== undefined) {
-      const ext = filePath.split('.').pop() || 'md';
-      openFile({ path: filePath, name, content: result.content, isDirty: false, language: 'markdown' });
-    }
-  };
 
-  const openChangedFile = async (filePath: string) => {
+    const result = await orchide.fs.readFile(filePath);
+    if (result?.content != null) {
+      openFile({
+        path: filePath,
+        name,
+        content: result.content,
+        isDirty: false,
+        language: 'markdown',
+      });
+      useLayoutStore.getState().setEditorOpen(true);
+    }
+  }, [openFile]);
+
+  // Open a changed file
+  const openChangedFile = useCallback(async (filePath: string) => {
     if (!orchide) return;
-    const result = await orchide.fs.readFile(filePath);
-    const name = filePath.split('/').pop() || filePath.split('\\').pop() || filePath;
-    if (result?.content !== null && result?.content !== undefined) {
-      const lang = getLang(name);
-      openFile({ path: filePath, name, content: result.content, isDirty: false, language: lang });
-    }
-  };
 
-  const getLang = (name: string) => {
-    const ext = name.split('.').pop()?.toLowerCase() || '';
-    const m: Record<string, string> = { ts: 'typescript', tsx: 'typescript', js: 'javascript', css: 'css', md: 'markdown', json: 'json', py: 'python' };
-    return m[ext] || 'plaintext';
-  };
+    const result = await orchide.fs.readFile(filePath);
+    const name = getFilename(filePath);
+
+    if (result?.content != null) {
+      openFile({
+        path: filePath,
+        name,
+        content: result.content,
+        isDirty: false,
+        language: getLanguageFromFilename(name),
+      });
+      useLayoutStore.getState().setEditorOpen(true);
+    }
+  }, [openFile]);
 
   return (
     <div className="right-sidebar-container">
@@ -129,7 +152,7 @@ export const RightSidebar = () => {
           <div className="rs-empty text-muted">No file changes</div>
         ) : (
           filesChanged.map(fc => {
-            const name = fc.filePath.split('/').pop() || fc.filePath.split('\\').pop() || fc.filePath;
+            const name = getFilename(fc.filePath);
             return (
               <div
                 key={fc.id}

@@ -1,26 +1,31 @@
+/**
+ * InputBar component - Message input and agent controls
+ * Uses proper event subscription with cleanup to prevent memory leaks
+ */
+
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Plus, ChevronDown, Mic, ArrowRight, Square, Globe, Cpu } from 'lucide-react';
+import { Plus, Mic, ArrowRight, Square, Globe, Cpu } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { useChatStore } from '../../store/chatStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { useAgentStore } from '../../store/agentStore';
 import './InputBar.css';
 
-type AgentMode = 'auto' | 'plan' | 'act';
-
 const orchide = (window as any).orchide;
 
-export const InputBar = () => {
+export const InputBar: React.FC = () => {
   const [value, setValue] = useState('');
-  const [agentMode, setAgentMode] = useState<AgentMode>('auto');
-  const [showModeMenu, setShowModeMenu] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const { sessionId, isStreaming, startStreaming, appendStreamChunk, finalizeStream, addMessage } = useChatStore();
-  const { activeWorkspace, mode } = useWorkspaceStore();
-  const { updateTaskMd, addArtifact, addFileChange } = useAgentStore();
+  // Get stable references to store state and actions
+  const sessionId = useChatStore(state => state.sessionId);
+  const isStreaming = useChatStore(state => state.isStreaming);
+  const addMessage = useChatStore(state => state.addMessage);
 
-  // Auto-resize textarea
+  const activeWorkspace = useWorkspaceStore(state => state.activeWorkspace);
+  const mode = useWorkspaceStore(state => state.mode);
+
+  // Auto-resize textarea on value change
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -28,60 +33,94 @@ export const InputBar = () => {
     }
   }, [value]);
 
-  // Setup IPC listeners once
+  // Setup IPC listeners with proper cleanup
+  // Using subscribeAll and accessing store.getState() to avoid stale closures
   useEffect(() => {
     if (!orchide) return;
 
-    orchide.agent.onStreamStart(() => startStreaming());
-    orchide.agent.onStreamChunk(({ chunk }: any) => appendStreamChunk(chunk));
-    orchide.agent.onStreamEnd(() => finalizeStream());
-    orchide.agent.onStreamError(({ error }: any) => {
-      finalizeStream();
-      console.error('Agent error:', error);
-    });
-    orchide.agent.onTaskUpdate(({ checklistMd }: any) => updateTaskMd(checklistMd));
-    orchide.agent.onArtifactCreated(({ artifact }: any) => {
-      addArtifact({ ...artifact, sessionId: artifact.session_id || artifact.sessionId });
-    });
-    orchide.agent.onFileChanged(({ change }: any) => {
-      addFileChange({ id: change.id, filePath: change.filePath, status: change.status });
+    const unsubscribe = orchide.agent.subscribeAll({
+      onStreamStart: () => {
+        useChatStore.getState().startStreaming();
+      },
+      onStreamChunk: ({ chunk }: { chunk: string }) => {
+        useChatStore.getState().appendStreamChunk(chunk);
+      },
+      onStreamEnd: () => {
+        useChatStore.getState().finalizeStream();
+      },
+      onStreamError: ({ error }: { error: string }) => {
+        console.error('[Agent] Stream error:', error);
+        useChatStore.getState().finalizeStream();
+      },
+      onTaskUpdate: ({ checklistMd }: { checklistMd: string }) => {
+        useAgentStore.getState().updateTaskMd(checklistMd);
+      },
+      onArtifactCreated: ({ artifact }: { artifact: any }) => {
+        useAgentStore.getState().addArtifact({
+          ...artifact,
+          sessionId: artifact.sessionId || artifact.session_id,
+        });
+      },
+      onFileChanged: ({ change }: { change: any }) => {
+        useAgentStore.getState().addFileChange({
+          id: change.id,
+          filePath: change.filePath || change.file_path,
+          status: change.status,
+        });
+      },
     });
 
-    return () => orchide.agent.removeAllListeners();
+    return unsubscribe;
   }, []);
 
+  // Handle send message
   const handleSend = useCallback(async () => {
     const msg = value.trim();
     if (!msg || isStreaming) return;
 
+    // Reset input
     setValue('');
-    if (textareaRef.current) textareaRef.current.style.height = 'auto';
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
 
     // Add user message to UI immediately
     const userMsg = {
-      id: uuidv4(), role: 'user' as const, content: msg, timestamp: Date.now(),
+      id: uuidv4(),
+      role: 'user' as const,
+      content: msg,
+      timestamp: Date.now(),
     };
     addMessage(userMsg);
 
     // Send to agent
-    await orchide?.agent.send({
-      sessionId,
-      message: msg,
-      mode: mode as 'chat' | 'agentic',
-      workspacePath: activeWorkspace?.path,
-      workspaceName: activeWorkspace?.name,
-    });
-  }, [value, isStreaming, sessionId, mode, activeWorkspace]);
+    try {
+      await orchide?.agent.send({
+        sessionId,
+        message: msg,
+        mode: mode as 'chat' | 'agentic',
+        workspacePath: activeWorkspace?.path,
+        workspaceName: activeWorkspace?.name,
+      });
+    } catch (error) {
+      console.error('[InputBar] Failed to send message:', error);
+    }
+  }, [value, isStreaming, sessionId, mode, activeWorkspace, addMessage]);
 
+  // Handle stop generation
+  const handleStop = useCallback(async () => {
+    if (orchide && sessionId) {
+      await orchide.agent.cancel(sessionId);
+    }
+    useChatStore.getState().finalizeStream();
+  }, [sessionId]);
+
+  // Handle keyboard shortcuts
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
-  };
-
-  const modeLabels: Record<AgentMode, string> = {
-    auto: 'Auto', plan: 'Planning', act: 'Act',
   };
 
   return (
@@ -101,29 +140,9 @@ export const InputBar = () => {
         disabled={isStreaming}
       />
       <div className="input-actions">
-        <button className="action-btn" title="Attach file"><Plus size={14} /></button>
-
-        <div className="mode-selector-wrapper">
-          <button
-            className="action-btn pill"
-            onClick={(e) => { e.stopPropagation(); setShowModeMenu(!showModeMenu); }}
-          >
-            <ChevronDown size={13} /> {modeLabels[agentMode]}
-          </button>
-          {showModeMenu && (
-            <div className="mode-menu" onClick={e => e.stopPropagation()}>
-              {(Object.entries(modeLabels) as [AgentMode, string][]).map(([k, v]) => (
-                <button
-                  key={k}
-                  className={`mode-option ${agentMode === k ? 'active' : ''}`}
-                  onClick={() => { setAgentMode(k); setShowModeMenu(false); }}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <button className="action-btn" title="Attach file">
+          <Plus size={14} />
+        </button>
 
         <button className="action-btn pill model-btn" title="Model: NVIDIA NIM">
           <Cpu size={13} /> NIM
@@ -140,7 +159,11 @@ export const InputBar = () => {
             <Mic size={14} />
           </button>
           {isStreaming ? (
-            <button className="action-btn send-btn stop-btn" onClick={() => finalizeStream()} title="Stop generation">
+            <button
+              className="action-btn send-btn stop-btn"
+              onClick={handleStop}
+              title="Stop generation"
+            >
               <Square size={14} />
             </button>
           ) : (

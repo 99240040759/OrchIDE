@@ -1,30 +1,26 @@
+/**
+ * Workspace store - manages active workspace, file tree, and open files
+ * Uses Zustand for state management
+ */
+
 import { create } from 'zustand';
+import type { FileEntry, OpenFile, AgentMode } from '../../shared/types';
 
-export interface FileEntry {
-  name: string;
-  path: string;
-  isDir: boolean;
-  ext?: string;
-  children?: FileEntry[];
-}
-
-export interface OpenFile {
-  path: string;
-  name: string;
-  content: string;
-  isDirty: boolean;
-  language: string;
-}
+// Re-export types for convenience
+export type { FileEntry, OpenFile };
 
 interface WorkspaceState {
   // Active workspace
   activeWorkspace: { path: string; name: string } | null;
-  mode: 'chat' | 'agentic';
+  mode: AgentMode;
+
   // File tree
   fileTree: FileEntry[];
+
   // Open files in editor
   openFiles: OpenFile[];
   activeFilePath: string | null;
+
   // Actions
   setWorkspace: (workspace: { path: string; name: string } | null) => void;
   setFileTree: (tree: FileEntry[]) => void;
@@ -43,7 +39,13 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   activeFilePath: null,
 
   setWorkspace: (workspace) => {
-    set({ activeWorkspace: workspace, mode: workspace ? 'agentic' : 'chat', fileTree: [] });
+    set({
+      activeWorkspace: workspace,
+      mode: workspace ? 'agentic' : 'chat',
+      fileTree: [],
+      openFiles: [],
+      activeFilePath: null,
+    });
     if (workspace) {
       get().refreshFileTree();
     }
@@ -54,26 +56,48 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   refreshFileTree: async () => {
     const ws = get().activeWorkspace;
     if (!ws) return;
-    const result = await (window as any).orchide.fs.listDir(ws.path);
-    if (result.entries) {
-      set({ fileTree: result.entries });
+
+    try {
+      const orchide = (window as any).orchide;
+      if (!orchide) return;
+
+      const result = await orchide.fs.listDir(ws.path);
+      if (result?.entries) {
+        set({ fileTree: result.entries });
+      }
+    } catch (error) {
+      console.error('[WorkspaceStore] Failed to refresh file tree:', error);
     }
   },
 
   openFile: (file) => {
-    const existing = get().openFiles.find(f => f.path === file.path);
-    if (!existing) {
-      set(state => ({ openFiles: [...state.openFiles, file] }));
+    const { openFiles, activeFilePath } = get();
+    const existing = openFiles.find(f => f.path === file.path);
+
+    if (existing) {
+      // File already open, just activate it
+      if (file.path !== activeFilePath) {
+        set({ activeFilePath: file.path });
+      }
+    } else {
+      // Add new file to open files
+      set({
+        openFiles: [...openFiles, file],
+        activeFilePath: file.path,
+      });
     }
-    set({ activeFilePath: file.path });
   },
 
   closeFile: (filePath) => {
-    set(state => {
+    set((state) => {
       const newFiles = state.openFiles.filter(f => f.path !== filePath);
-      const newActive = state.activeFilePath === filePath
-        ? (newFiles.length > 0 ? newFiles[newFiles.length - 1].path : null)
-        : state.activeFilePath;
+      let newActive = state.activeFilePath;
+
+      // If we closed the active file, activate the last remaining file
+      if (state.activeFilePath === filePath) {
+        newActive = newFiles.length > 0 ? newFiles[newFiles.length - 1].path : null;
+      }
+
       return { openFiles: newFiles, activeFilePath: newActive };
     });
   },
@@ -81,7 +105,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   setActiveFile: (filePath) => set({ activeFilePath: filePath }),
 
   updateFileContent: (filePath, content, isDirty = true) => {
-    set(state => ({
+    set((state) => ({
       openFiles: state.openFiles.map(f =>
         f.path === filePath ? { ...f, content, isDirty } : f
       ),

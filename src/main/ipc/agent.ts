@@ -1,3 +1,8 @@
+/**
+ * Agent IPC handlers
+ * Handles communication between renderer and AI agent with proper stream management
+ */
+
 import { ipcMain, BrowserWindow } from 'electron';
 import { v4 as uuidv4 } from 'uuid';
 import { createOrchAgent } from '../agent/mastraAgent';
@@ -7,93 +12,202 @@ import {
   getMessages,
   updateSessionTitle,
 } from '../db';
+import type { AgentRunParams } from '../../shared/types';
 
-interface AgentRunParams {
+/**
+ * Stream state management - tracks active streams per session
+ * Allows cancellation of ongoing streams when new messages arrive
+ */
+interface ActiveStream {
   sessionId: string;
-  message: string;
-  mode: 'chat' | 'agentic';
-  workspacePath?: string;
-  workspaceName?: string;
+  aborted: boolean;
+  startTime: number;
 }
 
-async function runAgentStream(params: AgentRunParams, senderWindow: BrowserWindow) {
-  const send = (channel: string, data: any) => {
-    if (!senderWindow.isDestroyed()) {
-      senderWindow.webContents.send(channel, data);
-    }
+const activeStreams = new Map<string, ActiveStream>();
+
+/**
+ * Cancel any existing stream for a session
+ */
+function cancelActiveStream(sessionId: string): void {
+  const existing = activeStreams.get(sessionId);
+  if (existing && !existing.aborted) {
+    existing.aborted = true;
+    console.log(`[Agent] Cancelled stream for session ${sessionId}`);
+  }
+}
+
+/**
+ * Check if a stream has been aborted
+ */
+function isStreamAborted(sessionId: string): boolean {
+  const stream = activeStreams.get(sessionId);
+  return stream?.aborted ?? false;
+}
+
+/**
+ * Run the agent stream with proper cancellation support
+ */
+async function runAgentStream(
+  params: AgentRunParams,
+  senderWindow: BrowserWindow
+): Promise<void> {
+  const { sessionId } = params;
+
+  // Cancel any existing stream for this session
+  cancelActiveStream(sessionId);
+
+  // Create new stream tracker
+  const streamState: ActiveStream = {
+    sessionId,
+    aborted: false,
+    startTime: Date.now(),
+  };
+  activeStreams.set(sessionId, streamState);
+
+  // Helper to send messages to renderer (with safety checks)
+  const send = (channel: string, data: unknown): void => {
+    if (senderWindow.isDestroyed()) return;
+    if (isStreamAborted(sessionId) && channel !== 'agent:stream-error') return;
+    senderWindow.webContents.send(channel, data);
   };
 
   try {
-    // Ensure session exists
-    createSession(params.sessionId, params.mode, params.workspacePath, params.workspaceName);
+    // Validate session ID
+    if (!sessionId || sessionId.trim() === '') {
+      throw new Error('Invalid session ID');
+    }
 
-    // Store user message in DB
+    // Ensure session exists in database
+    createSession(
+      sessionId,
+      params.mode,
+      params.workspacePath,
+      params.workspaceName
+    );
+
+    // Store user message
     const userMsgId = uuidv4();
-    insertMessage(userMsgId, params.sessionId, 'user', params.message);
+    insertMessage(userMsgId, sessionId, 'user', params.message);
 
-    // Build conversation history for context
-    const history = getMessages(params.sessionId);
-    const mastraMessages = history
-      .slice(-20) // last 20 messages for context
-      .map((m: any) => ({ role: m.role as 'user' | 'assistant', content: m.content as string }));
+    // Build conversation history (last 20 messages for context)
+    const history = getMessages(sessionId);
+    const mastraMessages = history.slice(-20).map((m: { role: string; content: string }) => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    }));
 
-    // Create agent
+    // Create agent instance
     const agent = createOrchAgent({
-      sessionId: params.sessionId,
+      sessionId,
       workspacePath: params.workspacePath,
       workspaceName: params.workspaceName,
     });
 
-    send('agent:stream-start', { sessionId: params.sessionId });
+    // Signal stream start
+    send('agent:stream-start', { sessionId });
 
     let fullResponse = '';
 
     // Stream the agent response
-    const stream = await agent.stream(mastraMessages as any);
+    const stream = await agent.stream(mastraMessages);
 
     for await (const chunk of stream.textStream) {
+      // Check for abort before processing each chunk
+      if (isStreamAborted(sessionId)) {
+        console.log(`[Agent] Stream aborted mid-flight for session ${sessionId}`);
+        break;
+      }
+
       fullResponse += chunk;
-      send('agent:stream-chunk', { sessionId: params.sessionId, chunk });
+      send('agent:stream-chunk', { sessionId, chunk });
     }
 
-    // Store assistant response
-    const assistantMsgId = uuidv4();
-    insertMessage(assistantMsgId, params.sessionId, 'assistant', fullResponse);
+    // Only store response if not aborted and has content
+    if (!isStreamAborted(sessionId) && fullResponse.trim()) {
+      const assistantMsgId = uuidv4();
+      insertMessage(assistantMsgId, sessionId, 'assistant', fullResponse);
 
-    // Auto-title from first interaction
-    const currentMessages = getMessages(params.sessionId);
-    if (currentMessages.length <= 2) {
-      const title = params.message.slice(0, 60) + (params.message.length > 60 ? '...' : '');
-      updateSessionTitle(params.sessionId, title);
-      send('agent:session-titled', { sessionId: params.sessionId, title });
+      // Auto-title: only for brand new sessions (exactly 2 messages = first exchange)
+      const currentMessages = getMessages(sessionId);
+      if (currentMessages.length === 2) {
+        const title = params.message.slice(0, 60) + (params.message.length > 60 ? '...' : '');
+        updateSessionTitle(sessionId, title);
+        send('agent:session-titled', { sessionId, title });
+      }
     }
 
-    send('agent:stream-end', { sessionId: params.sessionId });
+    // Signal stream end
+    if (!isStreamAborted(sessionId)) {
+      send('agent:stream-end', { sessionId });
+    }
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Agent encountered an error';
+    console.error(`[Agent] Stream error for session ${sessionId}:`, errorMessage);
+
     send('agent:stream-error', {
-      sessionId: params.sessionId,
-      error: error.message || 'Agent encountered an error',
+      sessionId,
+      error: errorMessage,
     });
+  } finally {
+    // Clean up stream tracker after a delay (allows for proper error handling)
+    setTimeout(() => {
+      const current = activeStreams.get(sessionId);
+      if (current && current.startTime === streamState.startTime) {
+        activeStreams.delete(sessionId);
+      }
+    }, 1000);
   }
 }
 
+/**
+ * Register all agent-related IPC handlers
+ */
 export function registerAgentIPC(): void {
+  // Main agent send handler
   ipcMain.handle('agent:send', async (event, params: AgentRunParams) => {
     const win = BrowserWindow.fromWebContents(event.sender);
-    if (!win) return { error: 'No window found' };
 
-    // Run async — don't await so IPC returns immediately and streaming begins
-    runAgentStream(params, win).catch(console.error);
+    if (!win) {
+      console.error('[Agent] No window found for sender');
+      return { error: 'No window found', started: false };
+    }
+
+    // Validate params
+    if (!params.message?.trim()) {
+      return { error: 'Empty message', started: false };
+    }
+
+    // Start streaming (fire and forget, but with proper error logging)
+    runAgentStream(params, win).catch((err) => {
+      console.error('[Agent] Unhandled stream error:', err);
+      // Try to notify the window of the error
+      if (!win.isDestroyed()) {
+        win.webContents.send('agent:stream-error', {
+          sessionId: params.sessionId,
+          error: 'Agent failed to start',
+        });
+      }
+    });
 
     return { started: true };
   });
 
+  // Cancel stream handler
+  ipcMain.handle('agent:cancel', async (_event, sessionId: string) => {
+    cancelActiveStream(sessionId);
+    return { cancelled: true };
+  });
+
+  // Get session messages
   ipcMain.handle('agent:getSession', async (_event, sessionId: string) => {
+    if (!sessionId) return { messages: [], error: 'Invalid session ID' };
     const messages = getMessages(sessionId);
     return { messages };
   });
 
+  // Settings handlers (imported dynamically to avoid circular deps)
   ipcMain.handle('settings:get', async () => {
     const { loadSettings } = await import('../appdata');
     return loadSettings();

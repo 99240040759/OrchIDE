@@ -1,125 +1,179 @@
-import { ipcMain, dialog } from 'electron';
-import fs from 'node:fs';
-import path from 'node:path';
+/**
+ * File System IPC handlers
+ * Provides file operations for the renderer process
+ * Uses async operations to prevent blocking
+ */
 
-interface FileEntry {
-  name: string;
-  path: string;
-  isDir: boolean;
-  ext?: string;
-  children?: FileEntry[];
+import { ipcMain, dialog, BrowserWindow } from 'electron';
+import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
+import path from 'node:path';
+import type { FileEntry } from '../../shared/types';
+
+/**
+ * Check if a file/folder should be ignored
+ */
+function shouldIgnore(name: string): boolean {
+  if (name.startsWith('.')) return true;
+  const ignored = new Set(['node_modules', '__pycache__', 'dist', 'build', '.git']);
+  return ignored.has(name);
 }
 
-function buildTree(dirPath: string, depth = 0): FileEntry[] {
-  if (depth > 6) return [];
+/**
+ * Build file tree recursively
+ */
+async function buildTree(dirPath: string, maxDepth: number = 6, currentDepth: number = 0): Promise<FileEntry[]> {
+  if (currentDepth >= maxDepth) return [];
+
   try {
-    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-    return entries
-      .filter(e => !e.name.startsWith('.') && e.name !== 'node_modules' && e.name !== '__pycache__')
-      .map(e => {
-        const fullPath = path.join(dirPath, e.name);
-        const isDir = e.isDirectory();
-        const entry: FileEntry = {
-          name: e.name,
-          path: fullPath,
-          isDir,
-          ext: isDir ? undefined : path.extname(e.name).slice(1),
-        };
-        if (isDir) {
-          entry.children = buildTree(fullPath, depth + 1);
-        }
-        return entry;
-      })
-      .sort((a, b) => {
-        if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
-        return a.name.localeCompare(b.name);
-      });
+    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+
+    const results: FileEntry[] = [];
+
+    for (const entry of entries) {
+      if (shouldIgnore(entry.name)) continue;
+
+      const fullPath = path.join(dirPath, entry.name);
+      const isDir = entry.isDirectory();
+
+      const fileEntry: FileEntry = {
+        name: entry.name,
+        path: fullPath,
+        isDir,
+        ext: isDir ? undefined : path.extname(entry.name).slice(1) || undefined,
+      };
+
+      if (isDir) {
+        fileEntry.children = await buildTree(fullPath, maxDepth, currentDepth + 1);
+      }
+
+      results.push(fileEntry);
+    }
+
+    // Sort: directories first, then alphabetically
+    return results.sort((a, b) => {
+      if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
   } catch {
     return [];
   }
 }
 
+/**
+ * Register all file system IPC handlers
+ */
 export function registerFileSystemIPC(): void {
+  // Read file
   ipcMain.handle('fs:readFile', async (_event, filePath: string) => {
     try {
-      return { content: fs.readFileSync(filePath, 'utf-8'), error: null };
-    } catch (e: any) {
-      return { content: null, error: e.message };
+      const content = await fs.readFile(filePath, 'utf-8');
+      return { content, error: null };
+    } catch (e: unknown) {
+      return { content: null, error: (e as Error).message };
     }
   });
 
+  // Write file
   ipcMain.handle('fs:writeFile', async (_event, filePath: string, content: string) => {
     try {
-      fs.mkdirSync(path.dirname(filePath), { recursive: true });
-      fs.writeFileSync(filePath, content, 'utf-8');
+      await fs.mkdir(path.dirname(filePath), { recursive: true });
+      await fs.writeFile(filePath, content, 'utf-8');
       return { error: null };
-    } catch (e: any) {
-      return { error: e.message };
+    } catch (e: unknown) {
+      return { error: (e as Error).message };
     }
   });
 
+  // List directory
   ipcMain.handle('fs:listDir', async (_event, dirPath: string) => {
     try {
-      return { entries: buildTree(dirPath), error: null };
-    } catch (e: any) {
-      return { entries: [], error: e.message };
+      const entries = await buildTree(dirPath);
+      return { entries, error: null };
+    } catch (e: unknown) {
+      return { entries: [], error: (e as Error).message };
     }
   });
 
+  // Create file
   ipcMain.handle('fs:createFile', async (_event, filePath: string) => {
     try {
-      fs.mkdirSync(path.dirname(filePath), { recursive: true });
-      if (!fs.existsSync(filePath)) fs.writeFileSync(filePath, '', 'utf-8');
-      return { error: null };
-    } catch (e: any) {
-      return { error: e.message };
-    }
-  });
-
-  ipcMain.handle('fs:createDir', async (_event, dirPath: string) => {
-    try {
-      fs.mkdirSync(dirPath, { recursive: true });
-      return { error: null };
-    } catch (e: any) {
-      return { error: e.message };
-    }
-  });
-
-  ipcMain.handle('fs:delete', async (_event, targetPath: string) => {
-    try {
-      const stat = fs.statSync(targetPath);
-      if (stat.isDirectory()) {
-        fs.rmSync(targetPath, { recursive: true, force: true });
-      } else {
-        fs.unlinkSync(targetPath);
+      await fs.mkdir(path.dirname(filePath), { recursive: true });
+      // Check if exists using access, create if not
+      try {
+        await fs.access(filePath);
+      } catch {
+        await fs.writeFile(filePath, '', 'utf-8');
       }
       return { error: null };
-    } catch (e: any) {
-      return { error: e.message };
+    } catch (e: unknown) {
+      return { error: (e as Error).message };
     }
   });
 
+  // Create directory
+  ipcMain.handle('fs:createDir', async (_event, dirPath: string) => {
+    try {
+      await fs.mkdir(dirPath, { recursive: true });
+      return { error: null };
+    } catch (e: unknown) {
+      return { error: (e as Error).message };
+    }
+  });
+
+  // Delete file or directory
+  ipcMain.handle('fs:delete', async (_event, targetPath: string) => {
+    try {
+      const stat = await fs.stat(targetPath);
+      if (stat.isDirectory()) {
+        await fs.rm(targetPath, { recursive: true, force: true });
+      } else {
+        await fs.unlink(targetPath);
+      }
+      return { error: null };
+    } catch (e: unknown) {
+      return { error: (e as Error).message };
+    }
+  });
+
+  // Rename file or directory
   ipcMain.handle('fs:rename', async (_event, oldPath: string, newPath: string) => {
     try {
-      fs.renameSync(oldPath, newPath);
+      await fs.rename(oldPath, newPath);
       return { error: null };
-    } catch (e: any) {
-      return { error: e.message };
+    } catch (e: unknown) {
+      return { error: (e as Error).message };
     }
   });
 
+  // Check if path exists
   ipcMain.handle('fs:exists', async (_event, targetPath: string) => {
-    return fs.existsSync(targetPath);
+    try {
+      await fs.access(targetPath);
+      return true;
+    } catch {
+      return false;
+    }
   });
 
+  // Open folder dialog
   ipcMain.handle('fs:openDialog', async (event) => {
-    const { BrowserWindow } = await import('electron');
     const win = BrowserWindow.fromWebContents(event.sender);
-    const result = await dialog.showOpenDialog(win!, {
-      properties: ['openDirectory'],
+
+    // If no window found, show dialog without parent (less ideal but works)
+    const dialogOptions = {
+      properties: ['openDirectory'] as const,
       title: 'Open Workspace Folder',
-    });
-    if (result.canceled || result.filePaths.length === 0) return null;
+    };
+
+    const result = win
+      ? await dialog.showOpenDialog(win, dialogOptions)
+      : await dialog.showOpenDialog(dialogOptions);
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return null;
+    }
+
     return result.filePaths[0];
   });
 }

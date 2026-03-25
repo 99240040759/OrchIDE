@@ -1,11 +1,11 @@
 /**
  * FileExplorer component - File tree view with context menu actions
- * Uses shared utilities for language detection
+ * Uses VS Code icon CDN for proper file type icons
  */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  ChevronDown, ChevronRight, Folder, FolderOpen, FileText,
+  ChevronDown, ChevronRight, Folder, FolderOpen,
   Plus, Trash2, Edit2, FolderPlus
 } from 'lucide-react';
 import { useWorkspaceStore } from '../../store/workspaceStore';
@@ -15,6 +15,46 @@ import type { FileEntry } from '../../../shared/types';
 import './FileExplorer.css';
 
 const orchide = (window as any).orchide;
+
+/**
+ * Get file extension icon URL from VS Code CDN
+ */
+function getVSCodeIcon(fileName: string): string {
+  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+  const baseUrl = 'https://cdn.jsdelivr.net/gh/vscode-icons/vscode-icons@master/icons';
+
+  const iconMap: Record<string, string> = {
+    ts: 'file_type_typescript.svg',
+    tsx: 'file_type_reactts.svg',
+    js: 'file_type_js.svg',
+    jsx: 'file_type_reactjs.svg',
+    css: 'file_type_css.svg',
+    html: 'file_type_html.svg',
+    json: 'file_type_json.svg',
+    md: 'file_type_markdown.svg',
+    py: 'file_type_python.svg',
+    rs: 'file_type_rust.svg',
+    go: 'file_type_go.svg',
+    java: 'file_type_java.svg',
+    c: 'file_type_c.svg',
+    cpp: 'file_type_cpp.svg',
+    h: 'file_type_c.svg',
+    svg: 'file_type_svg.svg',
+    png: 'file_type_image.svg',
+    jpg: 'file_type_image.svg',
+    jpeg: 'file_type_image.svg',
+    gif: 'file_type_image.svg',
+    txt: 'file_type_text.svg',
+    yml: 'file_type_yaml.svg',
+    yaml: 'file_type_yaml.svg',
+    xml: 'file_type_xml.svg',
+    sh: 'file_type_shell.svg',
+    bash: 'file_type_shell.svg',
+  };
+
+  const iconFile = iconMap[ext] || 'default_file.svg';
+  return `${baseUrl}/${iconFile}`;
+}
 
 interface ContextMenu {
   x: number;
@@ -155,7 +195,13 @@ export const FileExplorer: React.FC = () => {
                 <Folder size={13} className="icon-folder" />
               )
             ) : (
-              <FileText size={13} className="icon-file" />
+              <img
+                src={getVSCodeIcon(entry.name)}
+                alt=""
+                width={13}
+                height={13}
+                className="icon-file"
+              />
             )}
           </span>
           {isRenaming ? (

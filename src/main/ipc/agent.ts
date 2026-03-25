@@ -1,6 +1,7 @@
 /**
  * Agent IPC handlers
- * Handles communication between renderer and AI agent with proper stream management
+ * Handles communication between renderer and AI agent with full stream support
+ * Captures ALL events: text, tool calls, tool results, thinking, etc.
  */
 
 import { ipcMain, BrowserWindow } from 'electron';
@@ -12,11 +13,10 @@ import {
   getMessages,
   updateSessionTitle,
 } from '../db';
-import type { AgentRunParams } from '../../shared/types';
+import type { AgentRunParams, StreamEvent, ToolCallEvent } from '../../shared/types';
 
 /**
  * Stream state management - tracks active streams per session
- * Allows cancellation of ongoing streams when new messages arrive
  */
 interface ActiveStream {
   sessionId: string;
@@ -46,7 +46,8 @@ function isStreamAborted(sessionId: string): boolean {
 }
 
 /**
- * Run the agent stream with proper cancellation support
+ * Run the agent stream with full event capture
+ * Uses fullStream to capture ALL events including tool calls and results
  */
 async function runAgentStream(
   params: AgentRunParams,
@@ -65,11 +66,16 @@ async function runAgentStream(
   };
   activeStreams.set(sessionId, streamState);
 
-  // Helper to send messages to renderer (with safety checks)
+  // Helper to send messages to renderer
   const send = (channel: string, data: unknown): void => {
     if (senderWindow.isDestroyed()) return;
     if (isStreamAborted(sessionId) && channel !== 'agent:stream-error') return;
     senderWindow.webContents.send(channel, data);
+  };
+
+  // Helper to send stream events
+  const sendEvent = (type: StreamEvent['type'], data: StreamEvent['data']): void => {
+    send('agent:stream-event', { sessionId, type, data } as StreamEvent);
   };
 
   try {
@@ -90,7 +96,7 @@ async function runAgentStream(
     const userMsgId = uuidv4();
     insertMessage(userMsgId, sessionId, 'user', params.message);
 
-    // Build conversation history (last 20 messages for context)
+    // Build conversation history
     const history = getMessages(sessionId);
     const mastraMessages = history.slice(-20).map((m: { role: string; content: string }) => ({
       role: m.role as 'user' | 'assistant',
@@ -107,28 +113,110 @@ async function runAgentStream(
     // Signal stream start
     send('agent:stream-start', { sessionId });
 
-    let fullResponse = '';
+    let fullTextResponse = '';
+    const activeToolCalls = new Map<string, ToolCallEvent>();
 
-    // Stream the agent response
+    // Stream the agent response using fullStream for ALL events
     const stream = await agent.stream(mastraMessages);
 
-    for await (const chunk of stream.textStream) {
-      // Check for abort before processing each chunk
+    for await (const part of stream.fullStream) {
       if (isStreamAborted(sessionId)) {
-        console.log(`[Agent] Stream aborted mid-flight for session ${sessionId}`);
+        console.log(`[Agent] Stream aborted for session ${sessionId}`);
         break;
       }
 
-      fullResponse += chunk;
-      send('agent:stream-chunk', { sessionId, chunk });
+      switch (part.type) {
+        case 'text-delta': {
+          // Incremental text chunk
+          const text = part.textDelta || '';
+          fullTextResponse += text;
+          sendEvent('text-delta', { text });
+          // Also send legacy chunk for backwards compatibility
+          send('agent:stream-chunk', { sessionId, chunk: text });
+          break;
+        }
+
+        case 'tool-call': {
+          // Tool call initiated
+          const toolCall: ToolCallEvent = {
+            id: part.toolCallId || uuidv4(),
+            toolName: part.toolName || 'unknown',
+            args: part.args || {},
+            status: 'running',
+          };
+          activeToolCalls.set(toolCall.id, toolCall);
+          sendEvent('tool-call-start', { toolCall });
+          break;
+        }
+
+        case 'tool-result': {
+          // Tool execution completed
+          const toolId = part.toolCallId || '';
+          const existing = activeToolCalls.get(toolId);
+          if (existing) {
+            existing.status = 'completed';
+            existing.result = part.result;
+            activeToolCalls.set(toolId, existing);
+            sendEvent('tool-result', { toolCall: existing });
+          } else {
+            // Tool result without prior call (shouldn't happen but handle it)
+            const toolCall: ToolCallEvent = {
+              id: toolId,
+              toolName: part.toolName || 'unknown',
+              args: {},
+              status: 'completed',
+              result: part.result,
+            };
+            sendEvent('tool-result', { toolCall });
+          }
+          break;
+        }
+
+        case 'step-finish': {
+          // A step (text generation or tool use) completed
+          sendEvent('step-finish', {
+            stepType: (part as any).stepType || 'unknown',
+            finishReason: (part as any).finishReason || 'unknown'
+          });
+          break;
+        }
+
+        case 'finish': {
+          // Stream finished
+          sendEvent('finish', {
+            finishReason: (part as any).finishReason || 'stop'
+          });
+          break;
+        }
+
+        case 'error': {
+          // Handle streaming error
+          const errorMsg = (part as any).error?.message || 'Unknown stream error';
+          console.error(`[Agent] Stream error:`, errorMsg);
+          // Mark any active tool calls as errored
+          for (const [id, tc] of activeToolCalls) {
+            if (tc.status === 'running') {
+              tc.status = 'error';
+              tc.error = errorMsg;
+              sendEvent('tool-result', { toolCall: tc });
+            }
+          }
+          break;
+        }
+
+        default: {
+          // Log unknown event types for debugging
+          console.log(`[Agent] Unknown stream part type: ${(part as any).type}`);
+        }
+      }
     }
 
-    // Only store response if not aborted and has content
-    if (!isStreamAborted(sessionId) && fullResponse.trim()) {
+    // Store final response if not aborted and has content
+    if (!isStreamAborted(sessionId) && fullTextResponse.trim()) {
       const assistantMsgId = uuidv4();
-      insertMessage(assistantMsgId, sessionId, 'assistant', fullResponse);
+      insertMessage(assistantMsgId, sessionId, 'assistant', fullTextResponse);
 
-      // Auto-title: only for brand new sessions (exactly 2 messages = first exchange)
+      // Auto-title for new sessions
       const currentMessages = getMessages(sessionId);
       if (currentMessages.length === 2) {
         const title = params.message.slice(0, 60) + (params.message.length > 60 ? '...' : '');
@@ -151,7 +239,7 @@ async function runAgentStream(
       error: errorMessage,
     });
   } finally {
-    // Clean up stream tracker after a delay (allows for proper error handling)
+    // Clean up stream tracker
     setTimeout(() => {
       const current = activeStreams.get(sessionId);
       if (current && current.startTime === streamState.startTime) {
@@ -174,15 +262,13 @@ export function registerAgentIPC(): void {
       return { error: 'No window found', started: false };
     }
 
-    // Validate params
     if (!params.message?.trim()) {
       return { error: 'Empty message', started: false };
     }
 
-    // Start streaming (fire and forget, but with proper error logging)
+    // Start streaming async
     runAgentStream(params, win).catch((err) => {
       console.error('[Agent] Unhandled stream error:', err);
-      // Try to notify the window of the error
       if (!win.isDestroyed()) {
         win.webContents.send('agent:stream-error', {
           sessionId: params.sessionId,
@@ -207,7 +293,7 @@ export function registerAgentIPC(): void {
     return { messages };
   });
 
-  // Settings handlers (imported dynamically to avoid circular deps)
+  // Settings handlers
   ipcMain.handle('settings:get', async () => {
     const { loadSettings } = await import('../appdata');
     return loadSettings();

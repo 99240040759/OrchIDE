@@ -176,6 +176,23 @@ contextBridge.exposeInMainWorld('orchide', {
       onStreamChunk?: (data: { sessionId: string; chunk: string }) => void;
       onStreamEnd?: (data: { sessionId: string }) => void;
       onStreamError?: (data: { sessionId: string; error: string }) => void;
+      onStreamEvent?: (data: {
+        sessionId: string;
+        type: string;
+        data: {
+          text?: string;
+          toolCall?: {
+            id: string;
+            toolName: string;
+            args: Record<string, unknown>;
+            status: 'pending' | 'running' | 'completed' | 'error';
+            result?: unknown;
+            error?: string;
+          };
+          stepType?: string;
+          finishReason?: string;
+        };
+      }) => void;
       onTaskUpdate?: (data: { sessionId: string; checklistMd: string }) => void;
       onArtifactCreated?: (data: { sessionId: string; artifact: unknown }) => void;
       onFileChanged?: (data: { sessionId: string; change: unknown }) => void;
@@ -194,6 +211,9 @@ contextBridge.exposeInMainWorld('orchide', {
       }
       if (handlers.onStreamError) {
         unsubscribers.push(addListener('agent:stream-error', handlers.onStreamError as EventCallback));
+      }
+      if (handlers.onStreamEvent) {
+        unsubscribers.push(addListener('agent:stream-event', handlers.onStreamEvent as EventCallback));
       }
       if (handlers.onTaskUpdate) {
         unsubscribers.push(addListener('agent:task-update', handlers.onTaskUpdate as EventCallback));
@@ -227,6 +247,9 @@ contextBridge.exposeInMainWorld('orchide', {
     onStreamError: (cb: (data: { sessionId: string; error: string }) => void) =>
       addListener('agent:stream-error', cb as EventCallback),
 
+    onStreamEvent: (cb: (data: { sessionId: string; type: string; data: unknown }) => void) =>
+      addListener('agent:stream-event', cb as EventCallback),
+
     onTaskUpdate: (cb: (data: { sessionId: string; checklistMd: string }) => void) =>
       addListener('agent:task-update', cb as EventCallback),
 
@@ -248,6 +271,7 @@ contextBridge.exposeInMainWorld('orchide', {
         'agent:stream-chunk',
         'agent:stream-end',
         'agent:stream-error',
+        'agent:stream-event',
         'agent:task-update',
         'agent:artifact-created',
         'agent:file-changed',

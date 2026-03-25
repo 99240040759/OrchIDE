@@ -161,3 +161,47 @@ export interface SessionTitledData {
   sessionId: string;
   title: string;
 }
+
+// ============================================================================
+// Live Stream Event Types (for dynamic chat panel)
+// ============================================================================
+
+export type StreamEventType =
+  | 'text-delta'
+  | 'tool-call-start'
+  | 'tool-call-args'
+  | 'tool-result'
+  | 'thinking'
+  | 'step-finish'
+  | 'finish';
+
+export interface ToolCallEvent {
+  id: string;
+  toolName: string;
+  args: Record<string, unknown>;
+  status: 'pending' | 'running' | 'completed' | 'error';
+  result?: unknown;
+  error?: string;
+}
+
+export interface StreamEvent {
+  sessionId: string;
+  type: StreamEventType;
+  data: {
+    text?: string;
+    toolCall?: ToolCallEvent;
+    stepType?: string;
+    finishReason?: string;
+  };
+}
+
+// ============================================================================
+// Enhanced Message Types (for live chat)
+// ============================================================================
+
+export interface LiveMessagePart {
+  type: 'text' | 'tool-call' | 'tool-result' | 'thinking';
+  id: string;
+  content?: string;
+  toolCall?: ToolCallEvent;
+}

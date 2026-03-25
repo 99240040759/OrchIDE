@@ -331,18 +331,7 @@ export const ChatPanel: React.FC = () => {
                 <div className="message-bubble">
                   {msg.role === 'assistant' ? (
                     <>
-                      {/* Show tool chips inline if any */}
-                      {msg.toolCalls && msg.toolCalls.length > 0 && (
-                        <div className="tool-chips-inline">
-                          {msg.toolCalls.map((tc) => (
-                            <InlineToolChip
-                              key={tc.id}
-                              part={{ type: 'tool-call', id: tc.id, toolCall: tc, timestamp: msg.timestamp }}
-                            />
-                          ))}
-                        </div>
-                      )}
-                      {/* Show text content */}
+                      {/* Show text content only - tool calls already shown during streaming */}
                       {msg.content && (
                         <div
                           className="message-content markdown"

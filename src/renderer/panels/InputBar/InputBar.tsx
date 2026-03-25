@@ -42,13 +42,8 @@ export const InputBar: React.FC = () => {
       onStreamStart: () => {
         useChatStore.getState().startStreaming();
       },
-      onStreamChunk: ({ chunk }: { chunk: string }) => {
-        // Legacy: still append chunks for backwards compatibility
-        // But the new handleStreamEvent will also handle this
-        useChatStore.getState().appendStreamChunk(chunk);
-      },
       onStreamEvent: (event: any) => {
-        // Handle all rich stream events (tool calls, results, etc.)
+        // Handle all rich stream events (tool calls, results, text chunks, etc.)
         useChatStore.getState().handleStreamEvent(event);
       },
       onStreamEnd: () => {

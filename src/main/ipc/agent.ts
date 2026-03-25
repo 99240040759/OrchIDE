@@ -115,6 +115,7 @@ async function runAgentStream(
 
     let fullTextResponse = '';
     const activeToolCalls = new Map<string, ToolCallEvent>();
+    const toolCallArgsBuffer = new Map<string, string>(); // Buffer for streaming tool args
 
     // Stream the agent response using fullStream for ALL events
     const stream = await agent.stream(mastraMessages);
@@ -140,8 +141,57 @@ async function runAgentStream(
           break;
         }
 
+        case 'tool-call-input-streaming-start': {
+          // Tool call started - create initial tool call card
+          const payload = part.payload || {};
+          const toolCall: ToolCallEvent = {
+            id: payload.toolCallId || uuidv4(),
+            toolName: payload.toolName || 'unknown',
+            args: {},
+            status: 'running',
+          };
+          activeToolCalls.set(toolCall.id, toolCall);
+          toolCallArgsBuffer.set(toolCall.id, ''); // Initialize args buffer
+          sendEvent('tool-call-start', { toolCall });
+          break;
+        }
+
+        case 'tool-call-delta': {
+          // Tool arguments streaming in - accumulate them
+          const payload = part.payload || {};
+          const toolId = payload.toolCallId || '';
+          const argsDelta = payload.argsTextDelta || '';
+
+          if (toolId && argsDelta) {
+            const currentBuffer = toolCallArgsBuffer.get(toolId) || '';
+            toolCallArgsBuffer.set(toolId, currentBuffer + argsDelta);
+          }
+          break;
+        }
+
+        case 'tool-call-input-streaming-end': {
+          // Tool arguments complete - parse and update the tool call
+          const payload = part.payload || {};
+          const toolId = payload.toolCallId || '';
+          const existing = activeToolCalls.get(toolId);
+
+          if (existing) {
+            const argsJson = toolCallArgsBuffer.get(toolId) || '{}';
+            try {
+              existing.args = JSON.parse(argsJson);
+              activeToolCalls.set(toolId, existing);
+              sendEvent('tool-call-start', { toolCall: existing }); // Re-send with complete args
+            } catch (e) {
+              console.error(`[Agent] Failed to parse tool args for ${toolId}:`, argsJson);
+              existing.args = { _raw: argsJson };
+            }
+            toolCallArgsBuffer.delete(toolId); // Clean up buffer
+          }
+          break;
+        }
+
         case 'tool-call': {
-          // Tool call initiated - payload contains tool info
+          // Non-streaming tool call (fallback for models that don't stream tool args)
           const payload = part.payload || {};
           const toolCall: ToolCallEvent = {
             id: payload.toolCallId || uuidv4(),
@@ -174,6 +224,20 @@ async function runAgentStream(
               result: payload.result,
             };
             sendEvent('tool-result', { toolCall });
+          }
+          break;
+        }
+
+        case 'tool-error': {
+          // Tool execution failed
+          const payload = part.payload || {};
+          const toolId = payload.toolCallId || '';
+          const existing = activeToolCalls.get(toolId);
+          if (existing) {
+            existing.status = 'error';
+            existing.error = payload.error?.message || 'Tool execution failed';
+            activeToolCalls.set(toolId, existing);
+            sendEvent('tool-result', { toolCall: existing });
           }
           break;
         }
@@ -214,8 +278,15 @@ async function runAgentStream(
         }
 
         default: {
-          // Log unknown event types for debugging (but skip common ones to reduce noise)
-          if (!['start', 'step-start', 'response-metadata'].includes(part.type)) {
+          // Log unknown event types for debugging (but skip common/lifecycle ones)
+          const skipTypes = [
+            'start',
+            'step-start',
+            'response-metadata',
+            'text-start',
+            'text-end',
+          ];
+          if (!skipTypes.includes(part.type)) {
             console.log(`[Agent] Unhandled stream event: ${part.type}`);
           }
         }

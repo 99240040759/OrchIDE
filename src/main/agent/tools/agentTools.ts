@@ -26,8 +26,9 @@ Call this at the start of work and after each major step completes. This is stor
     outputSchema: z.object({
       success: z.boolean(),
     }),
-    execute: async ({ context }) => {
-      const content = `# ${context.title}\n\n${context.checklistMarkdown}`;
+    execute: async ({ context, ...inputs }: any) => {
+      const { title, checklistMarkdown } = inputs;
+      const content = `# ${title}\n\n${checklistMarkdown}`;
       writeSessionFile(sessionId, 'task.md', content);
       upsertTaskProgress(sessionId, content);
       broadcastToAll('agent:task-update', { sessionId, checklistMd: content });
@@ -53,8 +54,9 @@ Icons: implementation_plan→Map, walkthrough→BookOpen, task→ListTodo, other
       success: z.boolean(),
       filePath: z.string().nullable(),
     }),
-    execute: async ({ context }) => {
-      const filePath = writeSessionFile(sessionId, context.filename, context.content);
+    execute: async ({ context, ...inputs }: any) => {
+      const { name, type, filename, content } = inputs;
+      const filePath = writeSessionFile(sessionId, filename, content);
       const iconMap: Record<string, string> = {
         implementation_plan: 'Map',
         walkthrough: 'BookOpen',
@@ -62,11 +64,11 @@ Icons: implementation_plan→Map, walkthrough→BookOpen, task→ListTodo, other
         other: 'FileText',
       };
       const id = uuidv4();
-      const icon = iconMap[context.type] || 'FileText';
-      insertArtifact(id, sessionId, context.name, context.type, filePath, icon);
+      const icon = iconMap[type] || 'FileText';
+      insertArtifact(id, sessionId, name, type, filePath, icon);
       broadcastToAll('agent:artifact-created', {
         sessionId,
-        artifact: { id, name: context.name, type: context.type, filePath, icon },
+        artifact: { id, name, type, filePath, icon },
       });
       return { success: true, filePath };
     },
@@ -84,12 +86,13 @@ export function createFileChangedTool(sessionId: string) {
     outputSchema: z.object({
       success: z.boolean(),
     }),
-    execute: async ({ context }) => {
+    execute: async ({ context, ...inputs }: any) => {
+      const { filePath, status } = inputs;
       const id = uuidv4();
-      upsertFileChanged(id, sessionId, context.filePath, context.status);
+      upsertFileChanged(id, sessionId, filePath, status);
       broadcastToAll('agent:file-changed', {
         sessionId,
-        change: { id, filePath: context.filePath, status: context.status },
+        change: { id, filePath, status },
       });
       return { success: true };
     },

@@ -116,17 +116,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   addToolCall: (toolCall) => {
-    set((state) => ({
-      liveParts: [
-        ...state.liveParts,
-        {
-          id: toolCall.id,
-          type: 'tool-call',
-          toolCall,
-          timestamp: Date.now(),
-        },
-      ],
-    }));
+    set((state) => {
+      // Check if this tool call already exists (prevent duplicates)
+      const existingPart = state.liveParts.find(
+        (part) => part.type === 'tool-call' && part.toolCall?.id === toolCall.id
+      );
+
+      if (existingPart) {
+        // Update existing tool call instead of adding duplicate
+        const parts = state.liveParts.map((part) => {
+          if (part.type === 'tool-call' && part.toolCall?.id === toolCall.id) {
+            return { ...part, toolCall };
+          }
+          return part;
+        });
+        return { liveParts: parts };
+      } else {
+        // Add new tool call
+        return {
+          liveParts: [
+            ...state.liveParts,
+            {
+              id: toolCall.id,
+              type: 'tool-call',
+              toolCall,
+              timestamp: Date.now(),
+            },
+          ],
+        };
+      }
+    });
   },
 
   updateToolCall: (toolCall) => {
@@ -179,25 +198,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       .filter(p => p.type === 'tool-call' && p.toolCall)
       .map(p => p.toolCall!);
 
-    // Only create message if there's actual content (text or tool calls)
-    const hasContent = streamingContent.trim() || toolCalls.length > 0;
+    // Only create message if there's actual text content
+    const hasTextContent = streamingContent.trim();
 
-    if (hasContent) {
-      // Build final message content
-      let finalContent = streamingContent;
-
-      // If no text but we have tool calls, create a summary
-      if (!finalContent.trim() && toolCalls.length > 0) {
-        const toolNames = toolCalls
-          .map(tc => tc.toolName.replace(/([A-Z])/g, ' $1').trim())
-          .join(', ');
-        finalContent = `✓ Executed: ${toolNames}`;
-      }
-
+    if (hasTextContent) {
       const finalMsg: Message = {
         id: Date.now().toString(),
         role: 'assistant',
-        content: finalContent || 'Task completed',
+        content: streamingContent,
         timestamp: Date.now(),
         toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
       };
@@ -209,6 +217,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         streamingContent: '',
       });
     } else {
+      // No text content, just clean up streaming state
+      // Tool calls were already shown during streaming
       set({
         isStreaming: false,
         liveParts: [],

@@ -42,22 +42,22 @@ function getToolIcon(toolName: string) {
 }
 
 /**
- * Get action verb for tool
+ * Get action verb for tool (Cursor/Windsurf style)
  */
 function getToolAction(toolName: string): string {
   const actionMap: Record<string, string> = {
-    webSearch: 'Searched web for',
-    readFile: 'Analyzed',
-    writeFile: 'Edited',
-    listDirectory: 'Listed',
-    createFile: 'Created',
-    deleteFile: 'Deleted',
-    searchInFiles: 'Searched',
-    updateTaskProgress: 'Updated task',
-    createArtifact: 'Created artifact',
-    reportFileChanged: 'Modified',
+    webSearch: 'Searching',
+    readFile: 'Reading',
+    writeFile: 'Writing',
+    listDirectory: 'Listing',
+    createFile: 'Creating',
+    deleteFile: 'Deleting',
+    searchInFiles: 'Searching',
+    updateTaskProgress: 'Updating',
+    createArtifact: 'Creating artifact',
+    reportFileChanged: 'Reporting',
   };
-  return actionMap[toolName] || 'Executed';
+  return actionMap[toolName] || 'Running';
 }
 
 /**
@@ -248,7 +248,16 @@ const LiveStreamContent: React.FC = () => {
   return (
     <div className="message-row assistant">
       <div className="message-bubble">
-        {/* Text content only during streaming - tool calls shown in final message */}
+        {/* Show tool calls inline like Cursor/Windsurf */}
+        {toolParts.length > 0 && (
+          <div className="tool-chips-inline">
+            {toolParts.map((part) => (
+              <InlineToolChip key={part.id} part={part} />
+            ))}
+          </div>
+        )}
+
+        {/* Text content */}
         {textContent && (
           <div
             className="message-content markdown"
@@ -322,18 +331,7 @@ export const ChatPanel: React.FC = () => {
                 <div className="message-bubble">
                   {msg.role === 'assistant' ? (
                     <>
-                      {/* Show tool chips inline if any */}
-                      {msg.toolCalls && msg.toolCalls.length > 0 && (
-                        <div className="tool-chips-inline">
-                          {msg.toolCalls.map((tc) => (
-                            <InlineToolChip
-                              key={tc.id}
-                              part={{ type: 'tool-call', id: tc.id, toolCall: tc, timestamp: msg.timestamp }}
-                            />
-                          ))}
-                        </div>
-                      )}
-                      {/* Show text content */}
+                      {/* Show text content only - tool calls shown during streaming */}
                       {msg.content && (
                         <div
                           className="message-content markdown"

@@ -1,9 +1,34 @@
 /**
  * Path utilities - Browser-safe functions
  * These functions work in both Node.js and browser environments
- * For Node.js-specific secure path operations, the main process
- * uses its own implementation in fileTools.ts
+ * 
+ * SINGLE SOURCE OF TRUTH for path-related utilities used across the codebase.
  */
+
+/**
+ * Directories and files that should be ignored during file operations
+ * This is the canonical list - all code should use shouldIgnore() from this module
+ */
+const IGNORED_ENTRIES = new Set([
+  'node_modules',
+  '__pycache__',
+  '.git',
+  '.svn',
+  '.hg',
+  'dist',
+  'build',
+  'out',
+  '.next',
+  '.nuxt',
+  '.vite',
+  'coverage',
+  '.nyc_output',
+  'vendor',
+  'venv',
+  '.venv',
+  'env',
+  '.env',
+]);
 
 /**
  * Get the filename from a path (cross-platform, browser-safe)
@@ -58,31 +83,10 @@ export function joinPath(...segments: string[]): string {
  * @returns True if should be ignored
  */
 export function shouldIgnore(name: string): boolean {
-  // Hidden files and directories
+  // Hidden files and directories (starts with dot)
   if (name.startsWith('.')) return true;
-
-  // Common ignored directories
-  const ignoredDirs = new Set([
-    'node_modules',
-    '__pycache__',
-    '.git',
-    '.svn',
-    '.hg',
-    'dist',
-    'build',
-    'out',
-    '.next',
-    '.nuxt',
-    'coverage',
-    '.nyc_output',
-    'vendor',
-    'venv',
-    '.venv',
-    'env',
-    '.env',
-  ]);
-
-  return ignoredDirs.has(name);
+  
+  return IGNORED_ENTRIES.has(name);
 }
 
 /**

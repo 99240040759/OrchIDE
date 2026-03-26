@@ -16,6 +16,7 @@ export interface Message {
   content: string;
   timestamp: number;
   toolCalls?: ToolCallEvent[]; // Store tool calls with the message
+  parts?: LivePart[];
 }
 
 // ============================================================================
@@ -198,6 +199,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
       .filter(p => p.type === 'tool-call' && p.toolCall)
       .map(p => p.toolCall!);
 
+    const finalizedParts: LivePart[] = liveParts.map((part) => ({
+      ...part,
+      toolCall: part.toolCall
+        ? {
+            ...part.toolCall,
+            args: { ...(part.toolCall.args || {}) },
+          }
+        : undefined,
+    }));
+
     // Create message if there's content OR tool calls (to persist tool calls)
     const hasContent = streamingContent.trim() || toolCalls.length > 0;
 
@@ -208,6 +219,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         content: streamingContent,
         timestamp: Date.now(),
         toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+        parts: finalizedParts.length > 0 ? finalizedParts : undefined,
       };
 
       set({

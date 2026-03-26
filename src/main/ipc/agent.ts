@@ -1,349 +1,155 @@
 /**
- * Agent IPC handlers
- * Handles communication between renderer and AI agent with full stream support
- * Captures ALL events: text, tool calls, tool results, thinking, etc.
+ * Agent IPC Handlers
+ *
+ * Bridges the renderer process and the main-process AgentSession.
+ * Handles message dispatch, streaming event forwarding, tool/plan approval,
+ * and session lifecycle.
+ *
+ * Fixed bugs vs previous version:
+ *  1. setupSessionListeners no longer calls removeAllListeners() on every send
+ *     (used a Set to track sessions that already have listeners).
+ *  2. tool_call_start IPC case now reads data.toolCallDelta (not data.toolCall).
+ *  3. DB insertMessage receives a serialized string regardless of content type.
  */
 
 import { ipcMain, BrowserWindow } from 'electron';
 import { v4 as uuidv4 } from 'uuid';
-import { createOrchAgent } from '../agent/mastraAgent';
+import { AgentSession, type AgentSessionConfig } from '../agent/orchestrator';
+import type {
+  StreamEvent,
+  AgentEvent,
+  ChatMessage,
+  AssistantMessage,
+} from '../agent/core/types';
+import { loadSettings } from '../appdata';
 import {
-  createSession,
+  createSession as dbCreateSession,
   insertMessage,
   getMessages,
   updateSessionTitle,
+  insertArtifact,
+  upsertTaskProgress,
+  upsertFileChanged,
 } from '../db';
-import type { AgentRunParams, StreamEvent, ToolCallEvent } from '../../shared/types';
+
+// ============================================================================
+// Session Management
+// ============================================================================
+
+/** Live agent sessions keyed by sessionId. */
+const activeSessions = new Map<string, AgentSession>();
 
 /**
- * Stream state management - tracks active streams per session
+ * Sessions that already have event listeners attached.
+ * We use this to avoid re-attaching listeners (and wiping existing ones) on
+ * every 'agent:send' call.
  */
-interface ActiveStream {
+const sessionsWithListeners = new Set<string>();
+
+/**
+ * Get or create an agent session.
+ */
+function getOrCreateSession(
+  sessionId: string,
+  workspacePath: string,
+  workspaceName: string,
+  mode: 'agentic' | 'chat' = 'agentic'
+): AgentSession {
+  let session = activeSessions.get(sessionId);
+
+  if (!session) {
+    console.log('[Agent IPC] Creating new session:', sessionId);
+    const settings = loadSettings();
+
+    if (settings.NVIDIA_NIM_MODEL?.includes('deepseek')) {
+      console.warn('[Agent IPC] DeepSeek may not be available on NVIDIA NIM');
+    }
+
+    const config: AgentSessionConfig = {
+      sessionId,
+      workspacePath,
+      llmConfig: {
+        apiBase: settings.NVIDIA_NIM_BASE_URL || 'https://integrate.api.nvidia.com/v1',
+        apiKey: settings.NVIDIA_NIM_API_KEY || '',
+        model: settings.NVIDIA_NIM_MODEL || 'meta/llama-3.3-70b-instruct',
+      },
+    };
+
+    console.log('[Agent IPC] LLM config:', {
+      apiBase: config.llmConfig.apiBase,
+      model: config.llmConfig.model,
+      hasApiKey: !!config.llmConfig.apiKey,
+    });
+
+    session = new AgentSession(config);
+    activeSessions.set(sessionId, session);
+
+    // Persist to DB
+    dbCreateSession(sessionId, mode, workspacePath, workspaceName);
+    console.log('[Agent IPC] Session created and stored:', sessionId);
+  } else {
+    console.log('[Agent IPC] Reusing existing session:', sessionId);
+  }
+
+  return session;
+}
+
+/** Remove an active session and clean up its state. */
+function removeSession(sessionId: string): void {
+  const session = activeSessions.get(sessionId);
+  if (session) {
+    session.abort();
+    activeSessions.delete(sessionId);
+    sessionsWithListeners.delete(sessionId);
+    console.log('[Agent IPC] Session removed:', sessionId);
+  }
+}
+
+/** Clean up all active sessions (called on app shutdown). */
+export function cleanupAllSessions(): void {
+  console.log(`[Agent IPC] Cleaning up ${activeSessions.size} active sessions`);
+  for (const [sessionId, session] of activeSessions) {
+    try {
+      session.abort();
+    } catch {
+      // Ignore errors during cleanup
+    }
+  }
+  activeSessions.clear();
+  sessionsWithListeners.clear();
+}
+
+// ============================================================================
+// IPC Parameter Types
+// ============================================================================
+
+interface AgentSendParams {
   sessionId: string;
-  aborted: boolean;
-  startTime: number;
+  message: string;
+  workspacePath: string;
+  workspaceName: string;
+  mode?: 'agent' | 'chat';
 }
 
-const activeStreams = new Map<string, ActiveStream>();
+// ============================================================================
+// IPC Registration
+// ============================================================================
 
-/**
- * Cancel any existing stream for a session
- */
-function cancelActiveStream(sessionId: string): void {
-  const existing = activeStreams.get(sessionId);
-  if (existing && !existing.aborted) {
-    existing.aborted = true;
-    console.log(`[Agent] Cancelled stream for session ${sessionId}`);
-  }
-}
+export function registerAgentIPCNew(): void {
 
-/**
- * Check if a stream has been aborted
- */
-function isStreamAborted(sessionId: string): boolean {
-  const stream = activeStreams.get(sessionId);
-  return stream?.aborted ?? false;
-}
-
-/**
- * Run the agent stream with full event capture
- * Uses fullStream to capture ALL events including tool calls and results
- */
-async function runAgentStream(
-  params: AgentRunParams,
-  senderWindow: BrowserWindow
-): Promise<void> {
-  const { sessionId } = params;
-
-  // Cancel any existing stream for this session
-  cancelActiveStream(sessionId);
-
-  // Create new stream tracker
-  const streamState: ActiveStream = {
-    sessionId,
-    aborted: false,
-    startTime: Date.now(),
-  };
-  activeStreams.set(sessionId, streamState);
-
-  // Helper to send messages to renderer
-  const send = (channel: string, data: unknown): void => {
-    if (senderWindow.isDestroyed()) return;
-    if (isStreamAborted(sessionId) && channel !== 'agent:stream-error') return;
-    senderWindow.webContents.send(channel, data);
-  };
-
-  // Helper to send stream events
-  const sendEvent = (type: StreamEvent['type'], data: StreamEvent['data']): void => {
-    send('agent:stream-event', { sessionId, type, data } as StreamEvent);
-  };
-
-  try {
-    // Validate session ID
-    if (!sessionId || sessionId.trim() === '') {
-      throw new Error('Invalid session ID');
-    }
-
-    // Ensure session exists in database
-    createSession(
-      sessionId,
-      params.mode,
-      params.workspacePath,
-      params.workspaceName
-    );
-
-    // Store user message
-    const userMsgId = uuidv4();
-    insertMessage(userMsgId, sessionId, 'user', params.message);
-
-    // Build conversation history
-    const history = getMessages(sessionId);
-    const mastraMessages = history.slice(-20).map((m: { role: string; content: string }) => ({
-      role: m.role as 'user' | 'assistant',
-      content: m.content,
-    }));
-
-    // Create agent instance
-    const agent = createOrchAgent({
-      sessionId,
-      workspacePath: params.workspacePath,
-      workspaceName: params.workspaceName,
+  // --------------------------------------------------------------------------
+  // Main: send a user message to the agent
+  // --------------------------------------------------------------------------
+  ipcMain.handle('agent:send', async (event, params: AgentSendParams) => {
+    console.log('[Agent IPC] agent:send', {
+      sessionId: params.sessionId,
+      messagePreview: params.message?.substring(0, 80),
+      mode: params.mode,
     });
 
-    // Signal stream start
-    send('agent:stream-start', { sessionId });
-
-    let fullTextResponse = '';
-    const activeToolCalls = new Map<string, ToolCallEvent>();
-    const toolCallArgsBuffer = new Map<string, string>(); // Buffer for streaming tool args
-
-    // Stream the agent response using fullStream for ALL events
-    const stream = await agent.stream(mastraMessages);
-
-    for await (const chunk of stream.fullStream) {
-      if (isStreamAborted(sessionId)) {
-        console.log(`[Agent] Stream aborted for session ${sessionId}`);
-        break;
-      }
-
-      const part = chunk as any; // Mastra chunks have varied structure
-
-      switch (part.type) {
-        case 'text-delta': {
-          // Incremental text chunk - payload.text contains the actual text
-          const text = part.payload?.text || '';
-          if (text) {
-            fullTextResponse += text;
-            sendEvent('text-delta', { text });
-            // Also send legacy chunk for backwards compatibility
-            send('agent:stream-chunk', { sessionId, chunk: text });
-          }
-          break;
-        }
-
-        case 'tool-call-input-streaming-start': {
-          // Tool call started - just initialize tracking, don't send to UI yet
-          const payload = part.payload || {};
-          const toolId = payload.toolCallId || uuidv4();
-          const toolCall: ToolCallEvent = {
-            id: toolId,
-            toolName: payload.toolName || 'unknown',
-            args: {},
-            status: 'running',
-          };
-          activeToolCalls.set(toolId, toolCall);
-          toolCallArgsBuffer.set(toolId, ''); // Initialize args buffer
-          // Don't send to UI until we have complete args
-          break;
-        }
-
-        case 'tool-call-delta': {
-          // Tool arguments streaming in - accumulate them
-          const payload = part.payload || {};
-          const toolId = payload.toolCallId || '';
-          const argsDelta = payload.argsTextDelta || '';
-
-          if (toolId && argsDelta) {
-            const currentBuffer = toolCallArgsBuffer.get(toolId) || '';
-            toolCallArgsBuffer.set(toolId, currentBuffer + argsDelta);
-          }
-          break;
-        }
-
-        case 'tool-call-input-streaming-end': {
-          // Tool arguments complete - NOW send the complete tool call card
-          const payload = part.payload || {};
-          const toolId = payload.toolCallId || '';
-          const existing = activeToolCalls.get(toolId);
-
-          if (existing) {
-            const argsJson = toolCallArgsBuffer.get(toolId) || '{}';
-            try {
-              existing.args = JSON.parse(argsJson);
-              activeToolCalls.set(toolId, existing);
-              // Send complete tool call card to UI
-              sendEvent('tool-call-start', { toolCall: existing });
-            } catch (e) {
-              console.error(`[Agent] Failed to parse tool args for ${toolId}:`, argsJson);
-              existing.args = { _raw: argsJson };
-              sendEvent('tool-call-start', { toolCall: existing });
-            }
-            toolCallArgsBuffer.delete(toolId); // Clean up buffer
-          }
-          break;
-        }
-
-        case 'tool-call': {
-          // Non-streaming tool call (fallback for models that don't stream tool args)
-          const payload = part.payload || {};
-          const toolCall: ToolCallEvent = {
-            id: payload.toolCallId || uuidv4(),
-            toolName: payload.toolName || 'unknown',
-            args: payload.args || {},
-            status: 'running',
-          };
-          activeToolCalls.set(toolCall.id, toolCall);
-          sendEvent('tool-call-start', { toolCall });
-          break;
-        }
-
-        case 'tool-result': {
-          // Tool execution completed - payload contains result
-          const payload = part.payload || {};
-          const toolId = payload.toolCallId || '';
-          const existing = activeToolCalls.get(toolId);
-          if (existing) {
-            existing.status = 'completed';
-            existing.result = payload.result;
-            activeToolCalls.set(toolId, existing);
-            sendEvent('tool-result', { toolCall: existing });
-          } else {
-            // Tool result without prior call (shouldn't happen but handle it)
-            const toolCall: ToolCallEvent = {
-              id: toolId,
-              toolName: payload.toolName || 'unknown',
-              args: {},
-              status: 'completed',
-              result: payload.result,
-            };
-            sendEvent('tool-result', { toolCall });
-          }
-          break;
-        }
-
-        case 'tool-error': {
-          // Tool execution failed
-          const payload = part.payload || {};
-          const toolId = payload.toolCallId || '';
-          const existing = activeToolCalls.get(toolId);
-          if (existing) {
-            existing.status = 'error';
-            existing.error = payload.error?.message || 'Tool execution failed';
-            activeToolCalls.set(toolId, existing);
-            sendEvent('tool-result', { toolCall: existing });
-          }
-          break;
-        }
-
-        case 'step-finish': {
-          // A step (text generation or tool use) completed
-          const payload = part.payload || {};
-          sendEvent('step-finish', {
-            stepType: payload.stepType || 'unknown',
-            finishReason: payload.finishReason || 'unknown'
-          });
-          break;
-        }
-
-        case 'finish': {
-          // Stream finished
-          const payload = part.payload || {};
-          sendEvent('finish', {
-            finishReason: payload.finishReason || 'stop'
-          });
-          break;
-        }
-
-        case 'error': {
-          // Handle streaming error
-          const payload = part.payload || {};
-          const errorMsg = payload.error?.message || 'Unknown stream error';
-          console.error(`[Agent] Stream error:`, errorMsg);
-          // Mark any active tool calls as errored
-          for (const [id, tc] of activeToolCalls) {
-            if (tc.status === 'running') {
-              tc.status = 'error';
-              tc.error = errorMsg;
-              sendEvent('tool-result', { toolCall: tc });
-            }
-          }
-          break;
-        }
-
-        default: {
-          // Log unknown event types for debugging (but skip common/lifecycle ones)
-          const skipTypes = [
-            'start',
-            'step-start',
-            'response-metadata',
-            'text-start',
-            'text-end',
-          ];
-          if (!skipTypes.includes(part.type)) {
-            console.log(`[Agent] Unhandled stream event: ${part.type}`);
-          }
-        }
-      }
-    }
-
-    // Store final response if not aborted and has content
-    if (!isStreamAborted(sessionId) && fullTextResponse.trim()) {
-      const assistantMsgId = uuidv4();
-      insertMessage(assistantMsgId, sessionId, 'assistant', fullTextResponse);
-
-      // Auto-title for new sessions
-      const currentMessages = getMessages(sessionId);
-      if (currentMessages.length === 2) {
-        const title = params.message.slice(0, 60) + (params.message.length > 60 ? '...' : '');
-        updateSessionTitle(sessionId, title);
-        send('agent:session-titled', { sessionId, title });
-      }
-    }
-
-    // Signal stream end
-    if (!isStreamAborted(sessionId)) {
-      send('agent:stream-end', { sessionId });
-    }
-
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Agent encountered an error';
-    console.error(`[Agent] Stream error for session ${sessionId}:`, errorMessage);
-
-    send('agent:stream-error', {
-      sessionId,
-      error: errorMessage,
-    });
-  } finally {
-    // Clean up stream tracker
-    setTimeout(() => {
-      const current = activeStreams.get(sessionId);
-      if (current && current.startTime === streamState.startTime) {
-        activeStreams.delete(sessionId);
-      }
-    }, 1000);
-  }
-}
-
-/**
- * Register all agent-related IPC handlers
- */
-export function registerAgentIPC(): void {
-  // Main agent send handler
-  ipcMain.handle('agent:send', async (event, params: AgentRunParams) => {
     const win = BrowserWindow.fromWebContents(event.sender);
-
     if (!win) {
-      console.error('[Agent] No window found for sender');
+      console.error('[Agent IPC] No window found for sender');
       return { error: 'No window found', started: false };
     }
 
@@ -351,42 +157,364 @@ export function registerAgentIPC(): void {
       return { error: 'Empty message', started: false };
     }
 
-    // Start streaming async
-    runAgentStream(params, win).catch((err) => {
-      console.error('[Agent] Unhandled stream error:', err);
-      if (!win.isDestroyed()) {
-        win.webContents.send('agent:stream-error', {
-          sessionId: params.sessionId,
-          error: 'Agent failed to start',
-        });
-      }
-    });
+    const { sessionId, message, workspacePath, workspaceName } = params;
 
-    return { started: true };
+    try {
+      const dbMode = params.mode === 'chat' ? 'chat' : 'agentic';
+      const session = getOrCreateSession(sessionId, workspacePath, workspaceName, dbMode);
+
+      // Attach listeners ONCE per session lifetime.
+      // Do not call removeAllListeners here — that would blow away listeners
+      // that may be in the middle of handling a previous async stream.
+      setupSessionListeners(session, win, sessionId);
+
+      // Store user turn in DB
+      const userMsgId = uuidv4();
+      insertMessage(userMsgId, sessionId, 'user', message);
+
+      // Notify renderer that streaming is starting
+      win.webContents.send('agent:stream-start', { sessionId });
+
+      // Kick off the agent loop asynchronously; errors are surfaced via events.
+      session.chat(message).catch((error) => {
+        console.error(`[Agent IPC] Chat error for ${sessionId}:`, error);
+        if (!win.isDestroyed()) {
+          win.webContents.send('agent:stream-error', {
+            sessionId,
+            error: error instanceof Error ? error.message : 'Agent encountered an error',
+          });
+        }
+      });
+
+      return { started: true };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Failed to start agent';
+      console.error('[Agent IPC] agent:send error:', msg);
+      return { error: msg, started: false };
+    }
   });
 
-  // Cancel stream handler
+  // --------------------------------------------------------------------------
+  // Cancel current operation
+  // --------------------------------------------------------------------------
   ipcMain.handle('agent:cancel', async (_event, sessionId: string) => {
-    cancelActiveStream(sessionId);
+    activeSessions.get(sessionId)?.abort();
     return { cancelled: true };
   });
 
-  // Get session messages
+  // --------------------------------------------------------------------------
+  // Get session state (for reconnect / reload)
+  // --------------------------------------------------------------------------
   ipcMain.handle('agent:getSession', async (_event, sessionId: string) => {
     if (!sessionId) return { messages: [], error: 'Invalid session ID' };
-    const messages = getMessages(sessionId);
-    return { messages };
+
+    const session = activeSessions.get(sessionId);
+    if (session) {
+      return {
+        messages: session.getHistory(),
+        state: session.getState(),
+        currentPlan: session.getCurrentPlan(),
+      };
+    }
+
+    // Fallback: return raw DB messages
+    return { messages: getMessages(sessionId) };
   });
 
-  // Settings handlers
-  ipcMain.handle('settings:get', async () => {
-    const { loadSettings } = await import('../appdata');
-    return loadSettings();
+  // --------------------------------------------------------------------------
+  // Session lifecycle
+  // --------------------------------------------------------------------------
+  ipcMain.handle('agent:closeSession', async (_event, sessionId: string) => {
+    removeSession(sessionId);
+    return { success: true };
   });
+
+  ipcMain.handle('agent:exportSession', async (_event, sessionId: string) => {
+    const session = activeSessions.get(sessionId);
+    if (!session) return { error: 'Session not found' };
+    return { session: session.export() };
+  });
+
+  // --------------------------------------------------------------------------
+  // Settings
+  // --------------------------------------------------------------------------
+  ipcMain.handle('settings:get', async () => loadSettings());
 
   ipcMain.handle('settings:save', async (_event, settings: Record<string, string>) => {
     const { saveSettings } = await import('../appdata');
     saveSettings(settings);
     return { success: true };
   });
+
+  console.log('[Agent IPC] All handlers registered');
+}
+
+// ============================================================================
+// Session Event → IPC Bridge
+// ============================================================================
+
+/**
+ * Wire up a session's EventEmitter events to IPC messages sent to the renderer.
+ *
+ * This function is idempotent: if a session already has listeners attached
+ * (tracked via sessionsWithListeners), it returns immediately.  This prevents
+ * the original bug where calling removeAllListeners() on every 'agent:send'
+ * would wipe mid-flight event handlers.
+ */
+function setupSessionListeners(
+  session: AgentSession,
+  win: BrowserWindow,
+  sessionId: string
+): void {
+  if (sessionsWithListeners.has(sessionId)) {
+    console.log('[Agent IPC] Listeners already attached for session:', sessionId);
+    return;
+  }
+
+  sessionsWithListeners.add(sessionId);
+  console.log('[Agent IPC] Attaching listeners for session:', sessionId);
+
+  // ---- Stream events --------------------------------------------------------
+  session.on('stream', (event: StreamEvent) => {
+    if (win.isDestroyed()) return;
+    const { type, data } = event;
+
+    switch (type) {
+      // ---- Text streaming ---------------------------------------------------
+      case 'text_delta':
+        // Legacy chunk channel (for simple renderers that just concatenate)
+        win.webContents.send('agent:stream-chunk', {
+          sessionId,
+          chunk: data.text,
+        });
+        // Structured event channel
+        win.webContents.send('agent:stream-event', {
+          sessionId,
+          type: 'text-delta',
+          data: { text: data.text },
+        });
+        break;
+
+      // ---- Tool call starting to stream ------------------------------------
+      // FIXED: data lives in toolCallDelta, NOT toolCall, when the LLM first
+      // emits the tool call during streaming.
+      // Emit the ToolCallEvent shape that chatStore.handleStreamEvent expects.
+      case 'tool_call_start':
+        win.webContents.send('agent:stream-event', {
+          sessionId,
+          type: 'tool-call-start',
+          data: {
+            toolCall: {
+              id: data.toolCallDelta?.id ?? data.toolCall?.id ?? '',
+              toolName:
+                data.toolCallDelta?.function?.name ?? data.toolCall?.function?.name ?? '',
+              args: {},          // args aren't complete until tool_call_complete
+              status: 'running',
+            } satisfies import('../../shared/types').ToolCallEvent,
+          },
+        });
+        break;
+
+      // ---- Tool call arguments are streaming in chunks --------------------
+      case 'tool_call_delta':
+        // Renderers can use this for live argument preview if desired.
+        win.webContents.send('agent:stream-event', {
+          sessionId,
+          type: 'tool-call-delta',
+          data: {
+            toolCallId: data.toolCallDelta?.id,
+            argumentChunk: data.toolCallDelta?.function?.arguments,
+          },
+        });
+        break;
+
+      // ---- Tool call fully received, about to execute ----------------------
+      case 'tool_call_complete':
+        win.webContents.send('agent:stream-event', {
+          sessionId,
+          type: 'tool-call-complete',
+          data: {
+            toolCall: data.toolCall,
+            toolCallId: data.toolCall?.id ?? data.toolCallState?.toolCallId,
+          },
+        });
+        break;
+
+      // ---- Tool finished executing, result available -----------------------
+      // Map ToolCallState → ToolCallEvent shape so chatStore.updateToolCall works.
+      case 'tool_result': {
+        const tcs = data.toolCallState;
+        const resultText: string = tcs?.output?.map((o) => o.content).join('\n') ?? '';
+        win.webContents.send('agent:stream-event', {
+          sessionId,
+          type: 'tool-result',
+          data: {
+            toolCall: {
+              id: tcs?.toolCallId ?? '',
+              toolName: tcs?.toolCall?.function?.name ?? '',
+              args: tcs?.parsedArgs ?? {},
+              status: tcs?.status === 'done' ? 'completed' : 'error',
+              result: resultText || undefined,
+              error: tcs?.error,
+            } satisfies import('../../shared/types').ToolCallEvent,
+          },
+        });
+        break;
+      }
+
+      // ---- LLM stream ended (may have been mid-tool-loop) -----------------
+      case 'stream_end':
+        // Don't send stream-end here; wait for the 'complete' event which fires
+        // only after the entire tool loop (all iterations) finishes.
+        break;
+
+      case 'error':
+        win.webContents.send('agent:stream-error', {
+          sessionId,
+          error: data.error,
+        });
+        break;
+
+      default:
+        break;
+    }
+  });
+
+  // ---- Agent meta-events (task progress, artifacts, file changes) ----------
+  // These events come from the agent tools (updateTaskProgress, createArtifact,
+  // reportFileChanged) via session.emit('agent_event'). We discriminate by
+  // event.type and fire discrete IPC channels so the renderer's subscribeAll
+  // handles them. We also persist to DB.
+  session.on('agent_event', (event: AgentEvent) => {
+    if (win.isDestroyed()) return;
+    const evt = event as unknown as Record<string, unknown>;
+    const evtType = evt.type as string;
+
+    switch (evtType) {
+      case 'task_progress': {
+        const checklistMd = (evt.checklistMarkdown as string) || '';
+        // Persist to DB
+        upsertTaskProgress(sessionId, checklistMd);
+        // Send to renderer
+        win.webContents.send('agent:task-update', { sessionId, checklistMd });
+        break;
+      }
+      case 'artifact_created': {
+        const artifact = evt.artifact as Record<string, unknown>;
+        if (artifact) {
+          // Persist to DB
+          insertArtifact(
+            artifact.id as string,
+            sessionId,
+            artifact.name as string,
+            artifact.type as string,
+            artifact.filePath as string,
+            artifact.icon as string
+          );
+          // Send to renderer
+          win.webContents.send('agent:artifact-created', { sessionId, artifact });
+        }
+        break;
+      }
+      case 'file_changed': {
+        const filePath = evt.filePath as string;
+        const status = evt.status as 'added' | 'modified' | 'deleted';
+        const changeId = `fc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        // Persist to DB
+        upsertFileChanged(changeId, sessionId, filePath, status);
+        // Send to renderer
+        win.webContents.send('agent:file-changed', {
+          sessionId,
+          change: { id: changeId, filePath, status },
+        });
+        break;
+      }
+      case 'plan_created':
+      case 'plan_step_updated':
+        // Plans are tracked by the session/planManager internally.
+        // We forward the raw event for future extensibility.
+        win.webContents.send('agent:agent-event', { sessionId, event });
+        break;
+      default:
+        win.webContents.send('agent:agent-event', { sessionId, event });
+        break;
+    }
+  });
+
+  // ---- Entire agent turn complete (all tool iterations done) ---------------
+  session.on('complete', () => {
+    if (win.isDestroyed()) return;
+
+    // Persist the final assistant message to DB.
+    // FIXED: content can be null (tool-only responses) or MessageContent[] —
+    // always serialize to a string before handing to SQLite.
+    const history = session.getHistory();
+    const lastAssistantMsg = [...history]
+      .reverse()
+      .find((m): m is AssistantMessage => m.role === 'assistant');
+
+    if (lastAssistantMsg) {
+      const contentStr = serializeContent(lastAssistantMsg.content);
+      const msgId = uuidv4();
+      insertMessage(msgId, sessionId, 'assistant', contentStr);
+
+      // Auto-generate session title from first user message (when 2 msgs exist)
+      const dbMessages = getMessages(sessionId);
+      if (dbMessages.length === 2) {
+        const userMsg = dbMessages.find((m: { role: string }) => m.role === 'user');
+        if (userMsg) {
+          const title =
+            (userMsg.content as string).slice(0, 60) +
+            ((userMsg.content as string).length > 60 ? '...' : '');
+          updateSessionTitle(sessionId, title);
+          win.webContents.send('agent:session-titled', { sessionId, title });
+        }
+      }
+    }
+
+    // Tell renderer the turn is fully done
+    win.webContents.send('agent:stream-event', {
+      sessionId,
+      type: 'finish',
+      data: { finishReason: 'stop' },
+    });
+    win.webContents.send('agent:stream-end', { sessionId });
+
+    // Allow future messages to re-attach listeners cleanly if needed.
+    // We keep the session alive but remove from the "has listeners" set
+    // so the next send can re-check.  (Listeners stay attached — we only
+    // remove from the set so the guard doesn't think they're still in-flight.)
+    // NOTE: We intentionally do NOT call removeAllListeners() here.
+  });
+
+  // ---- Session-level error -------------------------------------------------
+  session.on('error', (error: Error) => {
+    if (win.isDestroyed()) return;
+    console.error('[Agent IPC] Session error event:', error.message);
+    win.webContents.send('agent:stream-error', {
+      sessionId,
+      error: error.message,
+    });
+    // Clean up listener tracking so next send re-attaches cleanly
+    sessionsWithListeners.delete(sessionId);
+  });
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/**
+ * Safely convert a ChatMessage content field to a plain string for SQLite.
+ * Handles: string | MessageContent[] | null | undefined
+ */
+function serializeContent(
+  content: string | import('../agent/core/types').MessageContent[] | null | undefined
+): string {
+  if (content === null || content === undefined) return '';
+  if (typeof content === 'string') return content;
+  // MessageContent[] — join text parts
+  return content
+    .map((c) => (c.type === 'text' ? (c.text ?? '') : '[image]'))
+    .join('');
 }

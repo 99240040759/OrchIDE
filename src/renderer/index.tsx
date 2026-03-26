@@ -1,10 +1,16 @@
 /**
  * Main renderer entry point
  * Handles app initialization, routing, and global event subscriptions
+ *
+ * THE EVENT BRIDGE:
+ * This file is the single junction that connects IPC events from the main
+ * process to the Zustand stores (chatStore, agentStore, workspaceStore).
+ * Without the subscribeAll() call in the App's useEffect, NOTHING from the
+ * agent's tools or streaming flows reaches the UI.
  */
 
 import './styles/global.css';
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Sidebar } from './layouts/Sidebar/Sidebar';
 import { RightSidebar } from './layouts/RightSidebar/RightSidebar';
@@ -14,6 +20,7 @@ import { TitleBar } from './layouts/TitleBar/TitleBar';
 import { SettingsWindow } from './views/SettingsWindow/SettingsWindow';
 import { useLayoutStore } from './store/layoutStore';
 import { useChatStore } from './store/chatStore';
+import { useAgentStore } from './store/agentStore';
 import { useWorkspaceStore } from './store/workspaceStore';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -35,7 +42,6 @@ const App: React.FC = () => {
   const setSessionId = useChatStore(state => state.setSessionId);
 
   const activeWorkspace = useWorkspaceStore(state => state.activeWorkspace);
-  const openFiles = useWorkspaceStore(state => state.openFiles);
 
   // Initialize session ID on first mount
   useEffect(() => {
@@ -43,6 +49,146 @@ const App: React.FC = () => {
       setSessionId(uuidv4());
     }
   }, [sessionId, setSessionId]);
+
+  // ========================================================================
+  // AGENT EVENT BRIDGE — The critical connection layer
+  //
+  // Every IPC event from the main-process AgentSession is routed here
+  // into the correct Zustand store. Without this, the right sidebar
+  // (task progress, artifacts, files changed) stays permanently empty.
+  // ========================================================================
+  useEffect(() => {
+    if (!orchide || !sessionId) return;
+
+    const unsubscribe = orchide.agent.subscribeAll({
+      // ---- Stream lifecycle --------------------------------------------------
+      onStreamStart: (data: { sessionId: string }) => {
+        if (data.sessionId !== sessionId) return;
+        useChatStore.getState().startStreaming();
+        useAgentStore.getState().setAgentState('generating');
+      },
+
+      // ---- Token-level text + tool events ------------------------------------
+      onStreamEvent: (data: {
+        sessionId: string;
+        type: string;
+        data: Record<string, unknown>;
+      }) => {
+        if (data.sessionId !== sessionId) return;
+        useChatStore.getState().handleStreamEvent(data as any);
+      },
+
+      // ---- Stream chunk (legacy compatibility) --------------------------------
+      // We ignore this to prevent double-printing since onStreamEvent handles text-deltas
+      onStreamChunk: () => {},
+
+      // ---- Stream fully finished ---------------------------------------------
+      onStreamEnd: (data: { sessionId: string }) => {
+        if (data.sessionId !== sessionId) return;
+        useChatStore.getState().finalizeStream();
+        useAgentStore.getState().setAgentState('idle');
+      },
+
+      // ---- Stream error -------------------------------------------------------
+      onStreamError: (data: { sessionId: string; error: string }) => {
+        if (data.sessionId !== sessionId) return;
+        console.error('[Event Bridge] Stream error:', data.error);
+        useChatStore.getState().finalizeStream();
+        useAgentStore.getState().setAgentState('error');
+      },
+
+      // ---- Task progress (from updateTaskProgress tool) ----------------------
+      onTaskUpdate: (data: { sessionId: string; checklistMd: string }) => {
+        if (data.sessionId !== sessionId) return;
+        useAgentStore.getState().updateTaskMd(data.checklistMd);
+      },
+
+      // ---- Artifact created (from createArtifact tool) -----------------------
+      onArtifactCreated: (data: { sessionId: string; artifact: any }) => {
+        if (data.sessionId !== sessionId) return;
+        const a = data.artifact;
+        useAgentStore.getState().addArtifact({
+          id: a.id,
+          name: a.name,
+          type: a.type,
+          filePath: a.filePath,
+          icon: a.icon || 'FileText',
+          sessionId: data.sessionId,
+        });
+      },
+
+      // ---- File change (from reportFileChanged tool) -------------------------
+      onFileChanged: (data: { sessionId: string; change: any }) => {
+        if (data.sessionId !== sessionId) return;
+        const c = data.change;
+        useAgentStore.getState().addFileChange({
+          id: c.id || `fc_${Date.now()}`,
+          filePath: c.filePath,
+          status: c.status,
+        });
+      },
+
+      // ---- Session titled (auto-generated from first user message) -----------
+      onSessionTitled: (data: { sessionId: string; title: string }) => {
+        if (data.sessionId !== sessionId) return;
+        // Could update left sidebar session list in the future
+        console.log('[Event Bridge] Session titled:', data.title);
+      },
+    });
+
+    return unsubscribe;
+  }, [sessionId]);
+
+  // ========================================================================
+  // Load persisted sidebar state when session changes
+  // (Artifacts, task progress, files from DB → sidebar on session restore)
+  // ========================================================================
+  useEffect(() => {
+    if (!orchide || !sessionId) return;
+
+    const loadSessionState = async () => {
+      try {
+        // Load artifacts from DB
+        const artifacts = await orchide.history.getArtifacts(sessionId);
+        if (artifacts && artifacts.length > 0) {
+          useAgentStore.getState().setArtifacts(
+            artifacts.map((a: any) => ({
+              id: a.id,
+              name: a.name,
+              type: a.type,
+              filePath: a.filePath,
+              icon: a.icon || 'FileText',
+              sessionId,
+            }))
+          );
+        }
+
+        // Load task progress from DB
+        const taskMd = await orchide.history.getTaskProgress(sessionId);
+        if (taskMd) {
+          useAgentStore.getState().updateTaskMd(taskMd);
+        }
+
+        // Load files changed from DB
+        const files = await orchide.history.getFilesChanged(sessionId);
+        if (files && files.length > 0) {
+          useAgentStore.getState().setFilesChanged(
+            files.map((f: any) => ({
+              id: f.id,
+              filePath: f.filePath,
+              status: f.status,
+            }))
+          );
+        }
+      } catch (error) {
+        console.error('[Event Bridge] Failed to load session state:', error);
+      }
+    };
+
+    // Clear old data then load new
+    useAgentStore.getState().clearForSession();
+    loadSessionState();
+  }, [sessionId]);
 
   // File watcher subscription with proper cleanup
   useEffect(() => {
@@ -59,7 +205,6 @@ const App: React.FC = () => {
           const openFile = currentOpenFiles.find(f => f.path === event.path);
 
           if (openFile && !openFile.isDirty) {
-            // Only reload if the file isn't dirty (user hasn't made changes)
             const result = await orchide.fs.readFile(event.path);
             if (result?.content != null) {
               useWorkspaceStore.getState().updateFileContent(event.path, result.content, false);
@@ -70,7 +215,7 @@ const App: React.FC = () => {
     );
 
     return unsubscribe;
-  }, [activeWorkspace?.path]); // Only re-subscribe when workspace path changes
+  }, [activeWorkspace?.path]);
 
   // Auto-open sidebars when entering workspace mode
   useEffect(() => {
@@ -126,4 +271,4 @@ if (rootElement) {
   }
 }
 
-console.log('[OrchIDE] Initialized');
+console.log('[OrchIDE] Initialized — Agent event bridge active');

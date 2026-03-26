@@ -32,12 +32,18 @@ export interface FileOperationResult {
 }
 
 // ============================================================================
+// Agent Types
+// ============================================================================
+
+export type AgentMode = 'chat' | 'agentic';
+
+// ============================================================================
 // Session & Message Types
 // ============================================================================
 
 export interface Message {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: number;
 }
@@ -45,24 +51,18 @@ export interface Message {
 export interface Session {
   id: string;
   title: string;
-  mode: 'chat' | 'agentic';
-  workspace_path?: string;
-  workspace_name?: string;
-  created_at: number;
-  updated_at: number;
+  mode: AgentMode;
+  workspacePath?: string;
+  workspaceName?: string;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface SessionItem {
   id: string;
   title: string;
-  updated_at: number;
+  updatedAt: number;
 }
-
-// ============================================================================
-// Agent Types
-// ============================================================================
-
-export type AgentMode = 'chat' | 'agentic';
 
 export interface AgentRunParams {
   sessionId: string;
@@ -82,16 +82,15 @@ export interface StreamState {
 // Artifact Types
 // ============================================================================
 
-export type ArtifactType = 'implementation_plan' | 'walkthrough' | 'task' | 'other';
+export type ArtifactType = 'file' | 'diagram' | 'implementation_plan' | 'walkthrough' | 'task' | 'other';
 
 export interface Artifact {
   id: string;
-  sessionId: string;
   name: string;
   type: ArtifactType;
   filePath: string;
   icon: string;
-  created_at?: number;
+  createdAt?: number;
 }
 
 // ============================================================================
@@ -114,6 +113,12 @@ export interface AppSettings {
   NVIDIA_NIM_API_KEY?: string;
   NVIDIA_NIM_MODEL?: string;
   TAVILY_API_KEY?: string;
+  AGENT_RECURSION_LIMIT?: string;
+  AGENT_MAX_TOOL_CALLS?: string;
+  AGENT_MAX_IDENTICAL_TOOL_CALLS?: string;
+  AGENT_MAX_IDENTICAL_TOOL_RESULTS?: string;
+  AGENT_MAX_CONCURRENCY?: string;
+  AGENT_TEMPERATURE?: string;
   [key: string]: string | undefined;
 }
 

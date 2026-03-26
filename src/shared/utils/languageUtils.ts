@@ -3,6 +3,8 @@
  * Single source of truth for file extension to language mapping
  */
 
+import { getExtension } from './pathUtils';
+
 const LANGUAGE_MAP: Record<string, string> = {
   // TypeScript/JavaScript
   ts: 'typescript',
@@ -127,18 +129,6 @@ export function getLanguageFromFilename(filename: string): string {
 }
 
 /**
- * Get file extension from filename
- * @param filename - The filename or path
- * @returns The extension without the dot, or empty string
- */
-export function getExtension(filename: string): string {
-  const baseName = filename.split('/').pop()?.split('\\').pop() || '';
-  const parts = baseName.split('.');
-  if (parts.length < 2) return '';
-  return parts.pop()?.toLowerCase() || '';
-}
-
-/**
  * Check if a file is likely a text file based on extension
  * @param filename - The filename to check
  * @returns True if the file is likely text
@@ -159,3 +149,6 @@ export function isTextFile(filename: string): boolean {
 
   return !binaryExtensions.has(ext);
 }
+
+// Re-export getExtension for backwards compatibility
+export { getExtension } from './pathUtils';

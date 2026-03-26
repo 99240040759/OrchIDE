@@ -276,6 +276,7 @@ contextBridge.exposeInMainWorld('orchide', {
         'agent:artifact-created',
         'agent:file-changed',
         'agent:session-titled',
+        'agent:agent-event',
       ];
       channels.forEach(channel => removeAllChannelListeners(channel));
     },

@@ -71,6 +71,11 @@ export interface OrchideAgentAPI {
   cancel: (sessionId: string) => Promise<{ cancelled: boolean }>;
   getSession: (sessionId: string) => Promise<{ messages: Message[] }>;
 
+  // Tool and Plan approval methods
+  approveToolCalls: (params: { sessionId: string; toolCallIds: string[] }) => Promise<{ success: boolean }>;
+  rejectToolCalls: (params: { sessionId: string; toolCallIds: string[]; reason?: string }) => Promise<{ success: boolean }>;
+  planApproval: (params: { sessionId: string; planId: string; approved: boolean; reason?: string }) => Promise<{ success: boolean }>;
+
   subscribeAll: (handlers: AgentEventHandlers) => () => void;
 
   onStreamStart: (cb: (data: { sessionId: string }) => void) => () => void;

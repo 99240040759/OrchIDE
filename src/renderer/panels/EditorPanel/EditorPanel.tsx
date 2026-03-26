@@ -3,11 +3,12 @@
  * File watching for external changes is handled centrally in index.tsx
  */
 
-import React, { useEffect, useRef, useCallback, useState } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import MonacoEditor from '@monaco-editor/react';
 import { X, ChevronLeft, ChevronRight, FileText, Download } from 'lucide-react';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { getLanguageFromFilename } from '../../../shared/utils/languageUtils';
+import { MarkdownRenderer } from '../../components/ui/MarkdownRenderer';
 import './EditorPanel.css';
 
 const orchide = (window as any).orchide;
@@ -25,6 +26,10 @@ export const EditorPanel: React.FC = () => {
   const pendingContent = useRef<Map<string, string>>(new Map());
 
   const activeFile = openFiles.find(f => f.path === activeFilePath) || null;
+  const activeLanguage = activeFile
+    ? (activeFile.language || getLanguageFromFilename(activeFile.name))
+    : 'plaintext';
+  const isMarkdownPreview = !!activeFile && activeLanguage === 'markdown';
 
   // Handle content change with debounced autosave
   const handleChange = useCallback((newContent: string | undefined, filePath: string) => {
@@ -168,38 +173,47 @@ export const EditorPanel: React.FC = () => {
       {/* Editor */}
       <div className="editor-content">
         {activeFile ? (
-          <MonacoEditor
-            key={activeFile.path}
-            height="100%"
-            language={activeFile.language || getLanguageFromFilename(activeFile.name)}
-            value={activeFile.content}
-            theme="orch-dark"
-            beforeMount={(monaco) => {
-              monaco.editor.defineTheme('orch-dark', monacoTheme);
-            }}
-            options={{
-              fontSize: 13,
-              fontFamily: "'Cascadia Code', 'Fira Code', 'Cascadia Mono', Menlo, 'DejaVu Sans Mono', Consolas, monospace",
-              fontLigatures: true,
-              minimap: { enabled: true, scale: 1 },
-              scrollBeyondLastLine: false,
-              wordWrap: 'on',
-              lineNumbers: 'on',
-              renderLineHighlight: 'line',
-              cursorBlinking: 'smooth',
-              cursorSmoothCaretAnimation: 'on',
-              smoothScrolling: true,
-              bracketPairColorization: { enabled: true },
-              guides: { bracketPairs: true, indentation: true },
-              renderWhitespace: 'selection',
-              padding: { top: 12, bottom: 12 },
-              suggest: { showKeywords: true, showSnippets: true },
-              tabSize: 2,
-              insertSpaces: true,
-              automaticLayout: true,
-            }}
-            onChange={(value) => handleChange(value, activeFile.path)}
-          />
+          isMarkdownPreview ? (
+            <div className="editor-markdown-preview">
+              <MarkdownRenderer
+                content={activeFile.content}
+                className="editor-markdown-content"
+              />
+            </div>
+          ) : (
+            <MonacoEditor
+              key={activeFile.path}
+              height="100%"
+              language={activeLanguage}
+              value={activeFile.content}
+              theme="orch-dark"
+              beforeMount={(monaco) => {
+                monaco.editor.defineTheme('orch-dark', monacoTheme);
+              }}
+              options={{
+                fontSize: 13,
+                fontFamily: "'Cascadia Code', 'Fira Code', 'Cascadia Mono', Menlo, 'DejaVu Sans Mono', Consolas, monospace",
+                fontLigatures: true,
+                minimap: { enabled: true, scale: 1 },
+                scrollBeyondLastLine: false,
+                wordWrap: 'on',
+                lineNumbers: 'on',
+                renderLineHighlight: 'line',
+                cursorBlinking: 'smooth',
+                cursorSmoothCaretAnimation: 'on',
+                smoothScrolling: true,
+                bracketPairColorization: { enabled: true },
+                guides: { bracketPairs: true, indentation: true },
+                renderWhitespace: 'selection',
+                padding: { top: 12, bottom: 12 },
+                suggest: { showKeywords: true, showSnippets: true },
+                tabSize: 2,
+                insertSpaces: true,
+                automaticLayout: true,
+              }}
+              onChange={(value) => handleChange(value, activeFile.path)}
+            />
+          )
         ) : (
           <div className="editor-empty">
             <div className="editor-empty-icon">📄</div>

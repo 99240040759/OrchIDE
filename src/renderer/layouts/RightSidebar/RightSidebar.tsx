@@ -36,6 +36,7 @@ export const RightSidebar: React.FC = () => {
   const taskItems = useAgentStore(state => state.taskItems);
   const artifacts = useAgentStore(state => state.artifacts);
   const filesChanged = useAgentStore(state => state.filesChanged);
+  const agentState = useAgentStore(state => state.agentState);
 
   const openFile = useWorkspaceStore(state => state.openFile);
 
@@ -81,6 +82,24 @@ export const RightSidebar: React.FC = () => {
 
   return (
     <div className="right-sidebar-container">
+
+      {/* AGENT STATE INDICATOR */}
+      {agentState !== 'idle' && (
+        <div className={`rs-agent-state ${agentState}`}>
+          {agentState === 'generating' && (
+            <>
+              <Loader2 size={13} className="spin" />
+              <span>Agent working…</span>
+            </>
+          )}
+          {agentState === 'error' && (
+            <>
+              <span className="error-dot">●</span>
+              <span>Agent error</span>
+            </>
+          )}
+        </div>
+      )}
 
       {/* TASK PROGRESS */}
       <div className="rs-section">

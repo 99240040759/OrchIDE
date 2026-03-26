@@ -183,3 +183,30 @@
 .file-change-name.added { color: #2EA043; }
 .file-change-name.modified { color: var(--text-color); }
 .file-change-name.deleted { color: #F85149; text-decoration: line-through; }
+
+/* AGENT STATE INDICATOR */
+.rs-agent-state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  margin-bottom: 12px;
+}
+.rs-agent-state.generating {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--accent-color);
+}
+.rs-agent-state.error {
+  background: rgba(248, 81, 73, 0.12);
+  color: #F85149;
+}
+.rs-agent-state .spin {
+  animation: spin 1.2s linear infinite;
+}
+.error-dot {
+  font-size: 8px;
+  color: #F85149;
+}

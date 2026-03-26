@@ -1,5 +1,48 @@
 import Database from 'better-sqlite3';
 import { getDbPath } from './appdata';
+import type { Message, Session, Artifact, FileChange } from '../shared/types';
+
+// DB row types (what we get from SQLite)
+interface SessionRow {
+  id: string;
+  title: string;
+  mode: 'chat' | 'agentic';
+  workspace_path: string | null;
+  workspace_name: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+interface MessageRow {
+  id: string;
+  session_id: string;
+  role: string;
+  content: string;
+  timestamp: number;
+}
+
+interface ArtifactRow {
+  id: string;
+  session_id: string;
+  name: string;
+  type: string;
+  file_path: string;
+  icon: string;
+  created_at: number;
+}
+
+interface FileChangedRow {
+  id: string;
+  session_id: string;
+  file_path: string;
+  status: 'added' | 'modified' | 'deleted';
+}
+
+interface TaskProgressRow {
+  session_id: string;
+  checklist_md: string;
+  updated_at: number;
+}
 
 let _db: Database.Database | null = null;
 
@@ -74,12 +117,14 @@ export function updateSessionTitle(id: string, title: string): void {
   db.prepare(`UPDATE sessions SET title=?, updated_at=? WHERE id=?`).run(title, Date.now(), id);
 }
 
-export function getChatSessions(): any[] {
-  return getDb().prepare(`SELECT * FROM sessions WHERE mode='chat' ORDER BY updated_at DESC`).all();
+export function getChatSessions(): Session[] {
+  const rows = getDb().prepare(`SELECT * FROM sessions WHERE mode='chat' ORDER BY updated_at DESC`).all() as SessionRow[];
+  return rows.map(sessionRowToSession);
 }
 
-export function getWorkspaceSessions(workspacePath: string): any[] {
-  return getDb().prepare(`SELECT * FROM sessions WHERE workspace_path=? ORDER BY updated_at DESC`).all(workspacePath);
+export function getWorkspaceSessions(workspacePath: string): Session[] {
+  const rows = getDb().prepare(`SELECT * FROM sessions WHERE workspace_path=? ORDER BY updated_at DESC`).all(workspacePath) as SessionRow[];
+  return rows.map(sessionRowToSession);
 }
 
 export function deleteSession(id: string): void {
@@ -93,8 +138,14 @@ export function insertMessage(id: string, sessionId: string, role: string, conte
   db.prepare(`UPDATE sessions SET updated_at=? WHERE id=?`).run(Date.now(), sessionId);
 }
 
-export function getMessages(sessionId: string): any[] {
-  return getDb().prepare(`SELECT * FROM messages WHERE session_id=? ORDER BY timestamp ASC`).all(sessionId);
+export function getMessages(sessionId: string): Message[] {
+  const rows = getDb().prepare(`SELECT * FROM messages WHERE session_id=? ORDER BY timestamp ASC`).all(sessionId) as MessageRow[];
+  return rows.map(row => ({
+    id: row.id,
+    role: row.role as 'user' | 'assistant' | 'system',
+    content: row.content,
+    timestamp: row.timestamp,
+  }));
 }
 
 // Artifacts
@@ -102,8 +153,16 @@ export function insertArtifact(id: string, sessionId: string, name: string, type
   getDb().prepare(`INSERT OR REPLACE INTO artifacts (id, session_id, name, type, file_path, icon, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(id, sessionId, name, type, filePath, icon, Date.now());
 }
 
-export function getArtifacts(sessionId: string): any[] {
-  return getDb().prepare(`SELECT * FROM artifacts WHERE session_id=? ORDER BY created_at ASC`).all(sessionId);
+export function getArtifacts(sessionId: string): Artifact[] {
+  const rows = getDb().prepare(`SELECT * FROM artifacts WHERE session_id=? ORDER BY created_at ASC`).all(sessionId) as ArtifactRow[];
+  return rows.map(row => ({
+    id: row.id,
+    name: row.name,
+    type: row.type as 'file' | 'diagram' | 'other',
+    filePath: row.file_path,
+    icon: row.icon,
+    createdAt: row.created_at,
+  }));
 }
 
 // Task Progress
@@ -112,7 +171,7 @@ export function upsertTaskProgress(sessionId: string, checklistMd: string): void
 }
 
 export function getTaskProgress(sessionId: string): string | null {
-  const row = getDb().prepare(`SELECT checklist_md FROM task_progress WHERE session_id=?`).get(sessionId) as any;
+  const row = getDb().prepare(`SELECT checklist_md FROM task_progress WHERE session_id=?`).get(sessionId) as TaskProgressRow | undefined;
   return row?.checklist_md ?? null;
 }
 
@@ -121,6 +180,24 @@ export function upsertFileChanged(id: string, sessionId: string, filePath: strin
   getDb().prepare(`INSERT OR REPLACE INTO files_changed (id, session_id, file_path, status) VALUES (?, ?, ?, ?)`).run(id, sessionId, filePath, status);
 }
 
-export function getFilesChanged(sessionId: string): any[] {
-  return getDb().prepare(`SELECT * FROM files_changed WHERE session_id=?`).all(sessionId);
+export function getFilesChanged(sessionId: string): FileChange[] {
+  const rows = getDb().prepare(`SELECT * FROM files_changed WHERE session_id=?`).all(sessionId) as FileChangedRow[];
+  return rows.map(row => ({
+    id: row.id,
+    filePath: row.file_path,
+    status: row.status,
+  }));
+}
+
+// Helper to convert DB row to Session type
+function sessionRowToSession(row: SessionRow): Session {
+  return {
+    id: row.id,
+    title: row.title,
+    mode: row.mode,
+    workspacePath: row.workspace_path ?? undefined,
+    workspaceName: row.workspace_name ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }

@@ -96,27 +96,9 @@ export const Sidebar: React.FC = () => {
     }));
     setMessages(mapped);
 
-    // Restore agent state
-    const taskMd = await orchide.history.getTaskProgress(sessId);
-    if (taskMd) updateTaskMd(taskMd);
-
-    const artifacts = await orchide.history.getArtifacts(sessId);
-    if (artifacts) {
-      setArtifacts(artifacts.map((a: any) => ({
-        ...a,
-        sessionId: a.session_id || a.sessionId,
-      })));
-    }
-
-    const filesChanged = await orchide.history.getFilesChanged(sessId);
-    if (filesChanged) {
-      setFilesChanged(filesChanged.map((f: any) => ({
-        id: f.id,
-        filePath: f.file_path || f.filePath,
-        status: f.status,
-      })));
-    }
-  }, [setSessionId, clearForSession, setMessages, updateTaskMd, setArtifacts, setFilesChanged]);
+    // Note: Agent state (tasks, artifacts, files) is automatically restored 
+    // by the global useEffect in index.tsx listening to sessionId changes.
+  }, [setSessionId, clearForSession, setMessages]);
 
   const deleteSession = useCallback(async (sessId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -168,7 +150,7 @@ export const Sidebar: React.FC = () => {
                     >
                       <span className="title">{s.title || 'Untitled'}</span>
                       <div className="item-right">
-                        <span className="time">{formatTime(s.updated_at)}</span>
+                        <span className="time">{formatTime(s.updatedAt)}</span>
                         <button className="delete-btn" onClick={(e) => deleteSession(s.id, e)}>
                           <Trash2 size={11} />
                         </button>
@@ -294,7 +276,7 @@ const WorkspaceSessionList: React.FC<{
         >
           <span className="title">{s.title || 'Untitled'}</span>
           <div className="item-right">
-            <span className="time">{formatTime(s.updated_at)}</span>
+            <span className="time">{formatTime(s.updatedAt)}</span>
             <button className="delete-btn" onClick={(e) => onDelete(s.id, e)}>
               <Trash2 size={11} />
             </button>

@@ -7,7 +7,14 @@
  */
 
 export * from './languageUtils';
-export * from './pathUtils';
+export { 
+  getFilename, 
+  getDirname, 
+  isAbsolutePath, 
+  joinPath, 
+  shouldIgnore,
+  getExtension 
+} from './pathUtils';
 
 // fileUtils is NOT exported here as it uses Node.js fs module
 // Import it directly: import { ... } from '../shared/utils/fileUtils'

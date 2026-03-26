@@ -6,7 +6,7 @@ import { getDb } from './db';
 import { registerFileSystemIPC } from './ipc/fileSystem';
 import { registerWatcherIPC } from './ipc/watcher';
 import { registerHistoryIPC } from './ipc/history';
-import { registerAgentIPC } from './ipc/agent';
+import { registerAgentIPCNew, cleanupAllSessions } from './ipc/agent';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -61,7 +61,7 @@ app.on('ready', () => {
   registerFileSystemIPC();
   registerWatcherIPC();
   registerHistoryIPC();
-  registerAgentIPC();
+  registerAgentIPCNew();
 
   // Settings window
   ipcMain.on('open-settings', () => {
@@ -111,6 +111,9 @@ app.on('ready', () => {
 });
 
 app.on('window-all-closed', () => {
+  // Clean up agent sessions before quitting
+  cleanupAllSessions();
+  
   if (process.platform !== 'darwin') {
     app.quit();
   }

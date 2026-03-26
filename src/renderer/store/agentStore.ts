@@ -1,4 +1,16 @@
+/**
+ * Agent Store — Cognitive Architecture State
+ *
+ * Tracks the agent's live cognitive state: task progress, artifacts,
+ * file changes, and current lifecycle phase.
+ * All data flows from IPC events emitted by the main-process AgentSession.
+ */
+
 import { create } from 'zustand';
+
+// ============================================================================
+// Types
+// ============================================================================
 
 export interface TaskItem {
   id: string;
@@ -22,58 +34,121 @@ export interface FileChange {
   status: 'added' | 'modified' | 'deleted';
 }
 
-interface AgentState {
+/** Agent lifecycle phase — drives UI indicators */
+export type AgentState = 'idle' | 'generating' | 'error';
+
+interface AgentStoreState {
+  // Task tracking
   taskTitle: string;
   taskItems: TaskItem[];
   rawTaskMd: string;
+
+  // Artifacts and files
   artifacts: Artifact[];
   filesChanged: FileChange[];
-  // Actions
+
+  // Agent state
+  agentState: AgentState;
+
+  // Actions - Task
   updateTaskMd: (md: string) => void;
+
+  // Actions - Artifacts
   addArtifact: (artifact: Artifact) => void;
   setArtifacts: (artifacts: Artifact[]) => void;
+
+  // Actions - Files
   addFileChange: (change: FileChange) => void;
   setFilesChanged: (changes: FileChange[]) => void;
+
+  // Actions - Agent state
+  setAgentState: (state: AgentState) => void;
+
+  // Actions - Session lifecycle
   clearForSession: () => void;
 }
 
+// ============================================================================
+// Markdown → TaskItem parser
+// ============================================================================
+
 function parseTaskMd(md: string): { title: string; items: TaskItem[] } {
-  const lines = md.split('\n');
+  const cleaned = md
+    .replace(/^\s*```(?:markdown|md)?\s*/i, '')
+    .replace(/\s*```\s*$/i, '');
+
+  const lines = cleaned.split('\n');
   let title = 'Task Progress';
   const items: TaskItem[] = [];
 
   for (const line of lines) {
-    if (line.startsWith('# ')) {
-      title = line.slice(2).trim();
+    const headingMatch = line.match(/^\s*#{1,6}\s+(.+)$/);
+    if (headingMatch && headingMatch[1]) {
+      title = headingMatch[1].trim();
       continue;
     }
-    // Match: [x], [ ], [/] checklist items at any indent level
-    const match = line.match(/^(\s*)[-*]\s+\[([ x/])\]\s+(.+)$/);
-    if (match) {
-      const indent = match[1].length;
-      const statusChar = match[2];
-      const text = match[3].trim();
+
+    // [x] done, [/] in-progress, [ ] todo
+    const checkboxMatch = line.match(/^(\s*)(?:[-*+]\s+|\d+\.\s+)?\[\s*([xX/\- ])\s*\]\s+(.+)$/);
+    if (checkboxMatch) {
+      const indent = checkboxMatch[1].replace(/\t/g, '  ').length;
+      const statusChar = checkboxMatch[2];
+      const text = checkboxMatch[3].trim();
       const status: TaskItem['status'] =
-        statusChar === 'x' ? 'done' :
+        statusChar.toLowerCase() === 'x' ? 'done' :
         statusChar === '/' ? 'in-progress' : 'todo';
+
       items.push({
         id: `${items.length}`,
         text,
         status,
         depth: Math.floor(indent / 2),
       });
+      continue;
+    }
+
+    // Plain list items → todo
+    const plainListMatch = line.match(/^(\s*)(?:[-*+]\s+|\d+\.\s+)(.+)$/);
+    if (plainListMatch) {
+      const indent = plainListMatch[1].replace(/\t/g, '  ').length;
+      const text = plainListMatch[2].trim();
+      if (!text) continue;
+
+      items.push({
+        id: `${items.length}`,
+        text,
+        status: 'todo',
+        depth: Math.floor(indent / 2),
+      });
+    }
+  }
+
+  if (items.length === 0) {
+    const fallback = lines
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith('#'))[0];
+
+    if (fallback) {
+      items.push({ id: '0', text: fallback, status: 'in-progress', depth: 0 });
+    } else {
+      items.push({ id: '0', text: `Working on ${title}`, status: 'in-progress', depth: 0 });
     }
   }
 
   return { title, items };
 }
 
-export const useAgentStore = create<AgentState>((set) => ({
+// ============================================================================
+// Store
+// ============================================================================
+
+export const useAgentStore = create<AgentStoreState>((set) => ({
   taskTitle: '',
   taskItems: [],
   rawTaskMd: '',
   artifacts: [],
   filesChanged: [],
+  agentState: 'idle',
 
   updateTaskMd: (md) => {
     const { title, items } = parseTaskMd(md);
@@ -108,7 +183,14 @@ export const useAgentStore = create<AgentState>((set) => ({
 
   setFilesChanged: (changes) => set({ filesChanged: changes }),
 
+  setAgentState: (agentState) => set({ agentState }),
+
   clearForSession: () => set({
-    taskTitle: '', taskItems: [], rawTaskMd: '', artifacts: [], filesChanged: [],
+    taskTitle: '',
+    taskItems: [],
+    rawTaskMd: '',
+    artifacts: [],
+    filesChanged: [],
+    agentState: 'idle',
   }),
 }));

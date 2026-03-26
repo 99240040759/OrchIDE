@@ -33,46 +33,7 @@ export const InputBar: React.FC = () => {
     }
   }, [value]);
 
-  // Setup IPC listeners with proper cleanup
-  // Using subscribeAll and accessing store.getState() to avoid stale closures
-  useEffect(() => {
-    if (!orchide) return;
-
-    const unsubscribe = orchide.agent.subscribeAll({
-      onStreamStart: () => {
-        useChatStore.getState().startStreaming();
-      },
-      onStreamEvent: (event: any) => {
-        // Handle all rich stream events (tool calls, results, text chunks, etc.)
-        useChatStore.getState().handleStreamEvent(event);
-      },
-      onStreamEnd: () => {
-        useChatStore.getState().finalizeStream();
-      },
-      onStreamError: ({ error }: { error: string }) => {
-        console.error('[Agent] Stream error:', error);
-        useChatStore.getState().finalizeStream();
-      },
-      onTaskUpdate: ({ checklistMd }: { checklistMd: string }) => {
-        useAgentStore.getState().updateTaskMd(checklistMd);
-      },
-      onArtifactCreated: ({ artifact }: { artifact: any }) => {
-        useAgentStore.getState().addArtifact({
-          ...artifact,
-          sessionId: artifact.sessionId || artifact.session_id,
-        });
-      },
-      onFileChanged: ({ change }: { change: any }) => {
-        useAgentStore.getState().addFileChange({
-          id: change.id,
-          filePath: change.filePath || change.file_path,
-          status: change.status,
-        });
-      },
-    });
-
-    return unsubscribe;
-  }, []);
+  // Set up auto-resize (moved from above since we removed the large effect)
 
   // Handle send message
   const handleSend = useCallback(async () => {

@@ -6,18 +6,9 @@
 
 import { ipcMain, dialog, BrowserWindow } from 'electron';
 import fs from 'node:fs/promises';
-import fsSync from 'node:fs';
 import path from 'node:path';
 import type { FileEntry } from '../../shared/types';
-
-/**
- * Check if a file/folder should be ignored
- */
-function shouldIgnore(name: string): boolean {
-  if (name.startsWith('.')) return true;
-  const ignored = new Set(['node_modules', '__pycache__', 'dist', 'build', '.git']);
-  return ignored.has(name);
-}
+import { shouldIgnore } from '../../shared/utils/pathUtils';
 
 /**
  * Build file tree recursively
@@ -161,8 +152,8 @@ export function registerFileSystemIPC(): void {
     const win = BrowserWindow.fromWebContents(event.sender);
 
     // If no window found, show dialog without parent (less ideal but works)
-    const dialogOptions = {
-      properties: ['openDirectory'] as const,
+    const dialogOptions: Electron.OpenDialogOptions = {
+      properties: ['openDirectory'],
       title: 'Open Workspace Folder',
     };
 

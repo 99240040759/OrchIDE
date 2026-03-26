@@ -9,47 +9,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { FileEntry } from '../../shared/types';
 import { shouldIgnore } from '../../shared/utils/pathUtils';
-
-/**
- * Build file tree recursively
- */
-async function buildTree(dirPath: string, maxDepth: number = 6, currentDepth: number = 0): Promise<FileEntry[]> {
-  if (currentDepth >= maxDepth) return [];
-
-  try {
-    const entries = await fs.readdir(dirPath, { withFileTypes: true });
-
-    const results: FileEntry[] = [];
-
-    for (const entry of entries) {
-      if (shouldIgnore(entry.name)) continue;
-
-      const fullPath = path.join(dirPath, entry.name);
-      const isDir = entry.isDirectory();
-
-      const fileEntry: FileEntry = {
-        name: entry.name,
-        path: fullPath,
-        isDir,
-        ext: isDir ? undefined : path.extname(entry.name).slice(1) || undefined,
-      };
-
-      if (isDir) {
-        fileEntry.children = await buildTree(fullPath, maxDepth, currentDepth + 1);
-      }
-
-      results.push(fileEntry);
-    }
-
-    // Sort: directories first, then alphabetically
-    return results.sort((a, b) => {
-      if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
-  } catch {
-    return [];
-  }
-}
+import { buildFileTree } from '../../shared/utils/fileUtils';
 
 /**
  * Register all file system IPC handlers
@@ -79,7 +39,7 @@ export function registerFileSystemIPC(): void {
   // List directory
   ipcMain.handle('fs:listDir', async (_event, dirPath: string) => {
     try {
-      const entries = await buildTree(dirPath);
+      const entries = await buildFileTree(dirPath);
       return { entries, error: null };
     } catch (e: unknown) {
       return { entries: [], error: (e as Error).message };

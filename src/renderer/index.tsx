@@ -10,7 +10,7 @@
  */
 
 import './styles/global.css';
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Sidebar } from './layouts/Sidebar/Sidebar';
 import { RightSidebar } from './layouts/RightSidebar/RightSidebar';
@@ -131,14 +131,22 @@ const App: React.FC = () => {
   // ========================================================================
   // Load persisted sidebar state when session changes
   // (Artifacts, task progress, files from DB → sidebar on session restore)
+  // Parallelized with Promise.all for faster loading
   // ========================================================================
   useEffect(() => {
     if (!orchide || !sessionId) return;
 
     const loadSessionState = async () => {
       try {
-        // Load artifacts from DB
-        const artifacts = await orchide.history.getArtifacts(sessionId);
+        // Clear old data first
+        useAgentStore.getState().clearForSession();
+
+        // Load artifacts and task progress in parallel
+        const [artifacts, taskMd] = await Promise.all([
+          orchide.history.getArtifacts(sessionId),
+          orchide.history.getTaskProgress(sessionId),
+        ]);
+
         if (artifacts && artifacts.length > 0) {
           useAgentStore.getState().setArtifacts(
             artifacts.map((a: any) => ({
@@ -152,33 +160,38 @@ const App: React.FC = () => {
           );
         }
 
-        // Load task progress from DB
-        const taskMd = await orchide.history.getTaskProgress(sessionId);
         if (taskMd) {
           useAgentStore.getState().updateTaskMd(taskMd);
         }
-
-
       } catch (error) {
         console.error('[Event Bridge] Failed to load session state:', error);
       }
     };
 
-    // Clear old data then load new
-    useAgentStore.getState().clearForSession();
     loadSessionState();
   }, [sessionId]);
 
-  // File watcher subscription with proper cleanup
+  // File watcher subscription with proper cleanup and debouncing
+  // Debounce prevents excessive refreshes during rapid file changes (e.g., git operations, builds)
+  const refreshDebounceRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     if (!orchide || !activeWorkspace) return;
 
+    const DEBOUNCE_MS = 300; // 300ms debounce for file tree refresh
+
     const unsubscribe = orchide.watcher.subscribe(
       async (event: { type: string; path: string }) => {
-        // Refresh file tree for any file system change
-        useWorkspaceStore.getState().refreshFileTree();
+        // Debounce file tree refresh to prevent thrashing
+        if (refreshDebounceRef.current) {
+          clearTimeout(refreshDebounceRef.current);
+        }
+        refreshDebounceRef.current = setTimeout(() => {
+          useWorkspaceStore.getState().refreshFileTree();
+          refreshDebounceRef.current = null;
+        }, DEBOUNCE_MS);
 
-        // If an open file changed externally, reload its content
+        // If an open file changed externally, reload its content (no debounce needed)
         if (event.type === 'change') {
           const currentOpenFiles = useWorkspaceStore.getState().openFiles;
           const openFile = currentOpenFiles.find(f => f.path === event.path);
@@ -193,7 +206,12 @@ const App: React.FC = () => {
       }
     );
 
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      if (refreshDebounceRef.current) {
+        clearTimeout(refreshDebounceRef.current);
+      }
+    };
   }, [activeWorkspace?.path]);
 
   // Auto-open sidebars when entering workspace mode

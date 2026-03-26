@@ -3,7 +3,7 @@
  * Renders messages, streaming text, thinking dropdown, and inline tool chips
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { useChatStore, LivePart } from '../../store/chatStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { InputBar } from '../InputBar/InputBar';
@@ -40,27 +40,33 @@ type TimelineGroup =
   | { kind: 'thinking'; key: string; text: string }
   | { kind: 'tools'; key: string; tools: LivePart[] };
 
-const KNOWN_TOOL_NAMES = new Set([
-  'webSearch',
-  'readFile',
-  'writeFile',
-  'listDirectory',
-  'createFile',
-  'deleteFile',
-  'searchInFiles',
-  'grepSearch',
-  'globSearch',
-  'runTerminalCommand',
-  'fetchUrl',
-  'updateTaskProgress',
-  'replaceFileContent',
-  'multiReplaceFileContent',
-  'startTerminalCommand',
-  'getCommandStatus',
-  'sendCommandInput',
-  'taskBoundary',
-  'notifyUser',
-]);
+/**
+ * Unified tool configuration - single source of truth for tool metadata
+ */
+const TOOL_CONFIG: Record<string, { icon: React.FC<{ size: number }>; running: string; completed: string }> = {
+  webSearch: { icon: Globe, running: 'Searching', completed: 'Searched' },
+  readFile: { icon: FileText, running: 'Reading', completed: 'Read' },
+  writeFile: { icon: Pencil, running: 'Writing', completed: 'Wrote' },
+  listDirectory: { icon: FolderOpen, running: 'Listing', completed: 'Listed' },
+  createFile: { icon: FilePlus, running: 'Creating', completed: 'Created' },
+  deleteFile: { icon: Trash2, running: 'Deleting', completed: 'Deleted' },
+  searchInFiles: { icon: FileSearch, running: 'Searching', completed: 'Searched' },
+  grepSearch: { icon: FileSearch, running: 'Searching', completed: 'Searched' },
+  globSearch: { icon: FolderOpen, running: 'Finding', completed: 'Found' },
+  runTerminalCommand: { icon: Terminal, running: 'Running', completed: 'Ran' },
+  fetchUrl: { icon: Link, running: 'Fetching', completed: 'Fetched' },
+  updateTaskProgress: { icon: CheckCircle, running: 'Updating', completed: 'Updated' },
+  createArtifact: { icon: FileText, running: 'Creating', completed: 'Created' },
+  replaceFileContent: { icon: Replace, running: 'Editing', completed: 'Edited' },
+  multiReplaceFileContent: { icon: Layers, running: 'Editing', completed: 'Edited' },
+  startTerminalCommand: { icon: PlayCircle, running: 'Starting', completed: 'Started' },
+  getCommandStatus: { icon: Activity, running: 'Checking', completed: 'Checked' },
+  sendCommandInput: { icon: Send, running: 'Sending', completed: 'Sent' },
+  taskBoundary: { icon: Eye, running: 'Setting task', completed: 'Set task' },
+  notifyUser: { icon: Bell, running: 'Notifying', completed: 'Notified' },
+};
+
+const KNOWN_TOOL_NAMES = new Set(Object.keys(TOOL_CONFIG));
 
 function updateBraceDepth(input: string, initialDepth: number): number {
   let depth = initialDepth;
@@ -143,63 +149,26 @@ function stripRawToolCallArtifacts(text: string): string {
 }
 
 /**
- * Get icon for tool based on name
+ * Get icon for tool based on name - uses unified TOOL_CONFIG
  */
 function getToolIcon(toolName: string) {
-  const iconMap: Record<string, React.ReactNode> = {
-    webSearch: <Globe size={14} />,
-    readFile: <FileText size={14} />,
-    writeFile: <Pencil size={14} />,
-    listDirectory: <FolderOpen size={14} />,
-    createFile: <FilePlus size={14} />,
-    deleteFile: <Trash2 size={14} />,
-    searchInFiles: <FileSearch size={14} />,
-    grepSearch: <FileSearch size={14} />,
-    globSearch: <FolderOpen size={14} />,
-    runTerminalCommand: <Terminal size={14} />,
-    fetchUrl: <Link size={14} />,
-    updateTaskProgress: <CheckCircle size={14} />,
-    createArtifact: <FileText size={14} />,
-    replaceFileContent: <Replace size={14} />,
-    multiReplaceFileContent: <Layers size={14} />,
-    startTerminalCommand: <PlayCircle size={14} />,
-    getCommandStatus: <Activity size={14} />,
-    sendCommandInput: <Send size={14} />,
-    taskBoundary: <Eye size={14} />,
-    notifyUser: <Bell size={14} />,
-  };
-  return iconMap[toolName] || <FileText size={14} />;
+  const config = TOOL_CONFIG[toolName];
+  if (config) {
+    const IconComponent = config.icon;
+    return <IconComponent size={14} />;
+  }
+  return <FileText size={14} />;
 }
 
 /**
- * Get action verb for tool (past tense when completed)
+ * Get action verb for tool (past tense when completed) - uses unified TOOL_CONFIG
  */
 function getToolAction(toolName: string, completed = false): string {
-  const actionMap: Record<string, { running: string; completed: string }> = {
-    webSearch: { running: 'Searching', completed: 'Searched' },
-    readFile: { running: 'Reading', completed: 'Read' },
-    writeFile: { running: 'Writing', completed: 'Wrote' },
-    listDirectory: { running: 'Listing', completed: 'Listed' },
-    createFile: { running: 'Creating', completed: 'Created' },
-    deleteFile: { running: 'Deleting', completed: 'Deleted' },
-    searchInFiles: { running: 'Searching', completed: 'Searched' },
-    grepSearch: { running: 'Searching', completed: 'Searched' },
-    globSearch: { running: 'Finding', completed: 'Found' },
-    runTerminalCommand: { running: 'Running', completed: 'Ran' },
-    fetchUrl: { running: 'Fetching', completed: 'Fetched' },
-    updateTaskProgress: { running: 'Updating', completed: 'Updated' },
-    createArtifact: { running: 'Creating', completed: 'Created' },
-    replaceFileContent: { running: 'Editing', completed: 'Edited' },
-    multiReplaceFileContent: { running: 'Editing', completed: 'Edited' },
-    startTerminalCommand: { running: 'Starting', completed: 'Started' },
-    getCommandStatus: { running: 'Checking', completed: 'Checked' },
-    sendCommandInput: { running: 'Sending', completed: 'Sent' },
-    taskBoundary: { running: 'Setting task', completed: 'Set task' },
-    notifyUser: { running: 'Notifying', completed: 'Notified' },
-  };
-
-  const actions = actionMap[toolName] || { running: 'Running', completed: 'Ran' };
-  return completed ? actions.completed : actions.running;
+  const config = TOOL_CONFIG[toolName];
+  if (config) {
+    return completed ? config.completed : config.running;
+  }
+  return completed ? 'Ran' : 'Running';
 }
 
 /**
@@ -440,7 +409,8 @@ function buildTimelineGroups(parts: LivePart[], keyPrefix: string): TimelineGrou
 }
 
 const PartsTimeline: React.FC<{ parts: LivePart[]; keyPrefix: string; isLive?: boolean }> = ({ parts, keyPrefix, isLive }) => {
-  const groups = buildTimelineGroups(parts, keyPrefix);
+  // Memoize buildTimelineGroups to avoid expensive recalculation on every render
+  const groups = useMemo(() => buildTimelineGroups(parts, keyPrefix), [parts, keyPrefix]);
   const isThinking = useChatStore(state => state.isThinking);
 
   return (
@@ -551,6 +521,8 @@ export const ChatPanel: React.FC = () => {
   }, []);
 
   // Auto-scroll on DOM mutations (the most bulletproof method)
+  // Note: We DON'T watch characterData to avoid firing on every character during streaming
+  // Instead, we only watch childList which fires on new messages/elements
   useEffect(() => {
     const container = threadMessagesRef.current;
     if (!container) return;
@@ -568,7 +540,8 @@ export const ChatPanel: React.FC = () => {
     // Scroll immediately on setup
     requestAnimationFrame(scrollToBottom);
 
-    // Watch for ANY changes to the DOM inside the chat
+    // Watch for new children/subtree changes only - NOT characterData
+    // This prevents firing on every character during streaming while still scrolling on new messages
     const observer = new MutationObserver(() => {
       requestAnimationFrame(scrollToBottom);
     });
@@ -576,11 +549,11 @@ export const ChatPanel: React.FC = () => {
     observer.observe(container, {
       childList: true,
       subtree: true,
-      characterData: true,
+      characterData: false, // CRITICAL: Don't watch character changes - causes massive thrashing during streaming
     });
 
     return () => observer.disconnect();
-  }, [isStreaming]);
+  }, []); // Remove isStreaming from deps - observer should be stable
 
   const isEmpty = messages.length === 0 && !isStreaming;
 

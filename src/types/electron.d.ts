@@ -59,8 +59,25 @@ export interface AgentEventHandlers {
   onStreamChunk?: (data: { sessionId: string; chunk: string }) => void;
   onStreamEnd?: (data: { sessionId: string }) => void;
   onStreamError?: (data: { sessionId: string; error: string }) => void;
+  onStreamEvent?: (data: { sessionId: string; type: string; data: Record<string, unknown> }) => void;
   onTaskUpdate?: (data: { sessionId: string; checklistMd: string }) => void;
-
+  onArtifactCreated?: (data: { sessionId: string; artifact: unknown }) => void;
+  onSessionTitled?: (data: { sessionId: string; title: string }) => void;
+  onTaskBoundary?: (data: {
+    sessionId: string;
+    taskName: string;
+    mode: string;
+    taskStatus: string;
+    taskSummary: string;
+    predictedTaskSize?: number;
+  }) => void;
+  onNotifyUser?: (data: {
+    sessionId: string;
+    message: string;
+    pathsToReview?: string[];
+    blockedOnUser: boolean;
+    shouldAutoProceed?: boolean;
+  }) => void;
 }
 
 export interface OrchideAgentAPI {
@@ -68,19 +85,20 @@ export interface OrchideAgentAPI {
   cancel: (sessionId: string) => Promise<{ cancelled: boolean }>;
   getSession: (sessionId: string) => Promise<{ messages: Message[] }>;
 
-  // Tool and Plan approval methods
-  approveToolCalls: (params: { sessionId: string; toolCallIds: string[] }) => Promise<{ success: boolean }>;
-  rejectToolCalls: (params: { sessionId: string; toolCallIds: string[]; reason?: string }) => Promise<{ success: boolean }>;
-  planApproval: (params: { sessionId: string; planId: string; approved: boolean; reason?: string }) => Promise<{ success: boolean }>;
-
   subscribeAll: (handlers: AgentEventHandlers) => () => void;
 
+  // Resume from notifyUser block
+  resumeNotify: (sessionId: string) => Promise<{ resumed: boolean; error?: string }>;
+
+  // Legacy individual subscription methods (deprecated - use subscribeAll)
   onStreamStart: (cb: (data: { sessionId: string }) => void) => () => void;
   onStreamChunk: (cb: (data: { sessionId: string; chunk: string }) => void) => () => void;
   onStreamEnd: (cb: (data: { sessionId: string }) => void) => () => void;
   onStreamError: (cb: (data: { sessionId: string; error: string }) => void) => () => void;
+  onStreamEvent: (cb: (data: { sessionId: string; type: string; data: unknown }) => void) => () => void;
   onTaskUpdate: (cb: (data: { sessionId: string; checklistMd: string }) => void) => () => void;
-
+  onArtifactCreated: (cb: (data: { sessionId: string; artifact: unknown }) => void) => () => void;
+  onSessionTitled: (cb: (data: { sessionId: string; title: string }) => void) => () => void;
 
   removeAllListeners: () => void;
 }
@@ -104,7 +122,7 @@ export interface OrchideHistoryAPI {
   getWorkspaceSessions: (workspacePath: string) => Promise<Session[]>;
   getMessages: (sessionId: string) => Promise<Message[]>;
   getArtifacts: (sessionId: string) => Promise<Artifact[]>;
-
+  getTaskProgress: (sessionId: string) => Promise<string | null>;
   deleteSession: (sessionId: string) => Promise<void>;
 }
 

@@ -4,7 +4,7 @@
  */
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Plus, Mic, ArrowRight, Square, Globe, Cpu } from 'lucide-react';
+import { ArrowRight, Square, Globe, Cpu } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { useChatStore } from '../../store/chatStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
@@ -102,10 +102,6 @@ export const InputBar: React.FC = () => {
         disabled={isStreaming}
       />
       <div className="input-actions">
-        <button className="action-btn" title="Attach file">
-          <Plus size={14} />
-        </button>
-
         <button className="action-btn pill model-btn" title="Model: NVIDIA NIM">
           <Cpu size={13} /> NIM
         </button>
@@ -117,9 +113,6 @@ export const InputBar: React.FC = () => {
         )}
 
         <div className="right-actions">
-          <button className="action-btn" title="Voice input">
-            <Mic size={14} />
-          </button>
           {isStreaming ? (
             <button
               className="action-btn send-btn stop-btn"

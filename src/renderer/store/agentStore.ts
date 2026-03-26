@@ -12,6 +12,15 @@ import { create } from 'zustand';
 // Types
 // ============================================================================
 
+/** Generate unique task ID */
+function generateTaskId(): string {
+  return `task-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+// ============================================================================
+// Types
+// ============================================================================
+
 export interface TaskItem {
   id: string;
   text: string;
@@ -108,7 +117,7 @@ function parseTaskMd(md: string): { title: string; items: TaskItem[] } {
         statusChar === '/' ? 'in-progress' : 'todo';
 
       items.push({
-        id: `${items.length}`,
+        id: generateTaskId(),
         text,
         status,
         depth: Math.floor(indent / 2),
@@ -124,7 +133,7 @@ function parseTaskMd(md: string): { title: string; items: TaskItem[] } {
       if (!text) continue;
 
       items.push({
-        id: `${items.length}`,
+        id: generateTaskId(),
         text,
         status: 'todo',
         depth: Math.floor(indent / 2),
@@ -138,9 +147,9 @@ function parseTaskMd(md: string): { title: string; items: TaskItem[] } {
       .filter((line) => line && !line.startsWith('#'))[0];
 
     if (fallback) {
-      items.push({ id: '0', text: fallback, status: 'in-progress', depth: 0 });
+      items.push({ id: generateTaskId(), text: fallback, status: 'in-progress', depth: 0 });
     } else {
-      items.push({ id: '0', text: `Working on ${title}`, status: 'in-progress', depth: 0 });
+      items.push({ id: generateTaskId(), text: `Working on ${title}`, status: 'in-progress', depth: 0 });
     }
   }
 

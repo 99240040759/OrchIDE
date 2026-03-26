@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -10,6 +10,8 @@ import './MarkdownRenderer.css';
 interface MarkdownRendererProps {
   content: string;
   className?: string;
+  /** If true, skips mermaid rendering (use during streaming for performance) */
+  isStreaming?: boolean;
 }
 
 const CopyButton: React.FC<{ text: string }> = ({ text }) => {
@@ -28,16 +30,25 @@ const CopyButton: React.FC<{ text: string }> = ({ text }) => {
   );
 };
 
-export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className }) => {
+export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className, isStreaming }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const lastContentHashRef = useRef<string>('');
 
+  // Only render mermaid diagrams when not streaming and content has stabilized
+  // This prevents expensive SVG generation during live typing
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || isStreaming) return;
+
+    // Simple hash to detect actual content changes
+    const contentHash = content.length.toString() + content.slice(-50);
+    if (contentHash === lastContentHashRef.current) return;
+    lastContentHashRef.current = contentHash;
+
     const timer = setTimeout(() => {
       if (containerRef.current) void renderMermaidDiagrams(containerRef.current);
-    }, 50);
+    }, 100); // Slightly longer delay for stability
     return () => clearTimeout(timer);
-  }, [content]);
+  }, [content, isStreaming]);
 
   return (
     <div ref={containerRef} className={`markdown-renderer ${className || ''}`.trim()}>

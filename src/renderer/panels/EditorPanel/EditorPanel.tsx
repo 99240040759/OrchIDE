@@ -15,6 +15,12 @@ const orchide = (window as any).orchide;
 
 const AUTOSAVE_DELAY = 700;
 
+/** Track pending saves with version numbers to prevent race conditions */
+interface PendingSave {
+  content: string;
+  version: number;
+}
+
 export const EditorPanel: React.FC = () => {
   const openFiles = useWorkspaceStore(state => state.openFiles);
   const activeFilePath = useWorkspaceStore(state => state.activeFilePath);
@@ -23,7 +29,8 @@ export const EditorPanel: React.FC = () => {
   const updateFileContent = useWorkspaceStore(state => state.updateFileContent);
 
   const saveTimers = useRef<Map<string, NodeJS.Timeout>>(new Map());
-  const pendingContent = useRef<Map<string, string>>(new Map());
+  const pendingContent = useRef<Map<string, PendingSave>>(new Map());
+  const savedVersions = useRef<Map<string, number>>(new Map());
 
   const activeFile = openFiles.find(f => f.path === activeFilePath) || null;
   const activeLanguage = activeFile
@@ -31,12 +38,13 @@ export const EditorPanel: React.FC = () => {
     : 'plaintext';
   const isMarkdownPreview = !!activeFile && activeLanguage === 'markdown';
 
-  // Handle content change with debounced autosave
+  // Handle content change with debounced autosave and version tracking
   const handleChange = useCallback((newContent: string | undefined, filePath: string) => {
     if (newContent === undefined) return;
 
-    // Store the latest content for this file
-    pendingContent.current.set(filePath, newContent);
+    // Increment version for this file
+    const currentVersion = (pendingContent.current.get(filePath)?.version ?? 0) + 1;
+    pendingContent.current.set(filePath, { content: newContent, version: currentVersion });
 
     // Update UI immediately (mark as dirty)
     updateFileContent(filePath, newContent, true);
@@ -46,18 +54,21 @@ export const EditorPanel: React.FC = () => {
     if (existing) clearTimeout(existing);
 
     const timer = setTimeout(async () => {
-      // Get the latest content (may have changed since timer was set)
-      const contentToSave = pendingContent.current.get(filePath);
-      if (contentToSave === undefined) return;
+      const pending = pendingContent.current.get(filePath);
+      if (!pending) return;
+
+      const { content: contentToSave, version: saveVersion } = pending;
 
       const result = await orchide?.fs.writeFile(filePath, contentToSave);
       if (!result?.error) {
-        // Only mark as clean if the saved content matches what's currently pending
-        const currentPending = pendingContent.current.get(filePath);
-        if (currentPending === contentToSave) {
+        // Only mark as clean if no newer version exists
+        const latestPending = pendingContent.current.get(filePath);
+        if (latestPending && latestPending.version === saveVersion) {
           useWorkspaceStore.getState().updateFileContent(filePath, contentToSave, false);
+          savedVersions.current.set(filePath, saveVersion);
           pendingContent.current.delete(filePath);
         }
+        // If version changed, another save is already queued
       }
     }, AUTOSAVE_DELAY);
 

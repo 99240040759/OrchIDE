@@ -6,11 +6,25 @@
 
 import { ipcMain, BrowserWindow } from 'electron';
 import chokidar, { FSWatcher } from 'chokidar';
+import { shouldIgnore } from '../../shared/utils/pathUtils';
 
 // Watcher state
 let activeWatcher: FSWatcher | null = null;
 let watcherWindowId: number | null = null;
 let windowCloseHandler: (() => void) | null = null;
+
+/**
+ * Build ignore regex from shouldIgnore function
+ * This ensures watcher ignores the same patterns as file operations
+ */
+function buildIgnoreFunction(): (path: string) => boolean {
+  return (filePath: string) => {
+    // Extract the filename from the path
+    const parts = filePath.split(/[/\\]/);
+    const name = parts[parts.length - 1];
+    return shouldIgnore(name);
+  };
+}
 
 /**
  * Clean up the active watcher
@@ -61,10 +75,10 @@ export function registerWatcherIPC(): void {
     };
     win.once('closed', windowCloseHandler);
 
-    // Create the watcher
+    // Create the watcher with ignore function derived from canonical list
     try {
       activeWatcher = chokidar.watch(workspacePath, {
-        ignored: /(^|[\/\\])(\.git|node_modules|__pycache__|\.DS_Store|\.next|dist|build|coverage)/,
+        ignored: buildIgnoreFunction(),
         persistent: true,
         ignoreInitial: true,
         depth: 10,

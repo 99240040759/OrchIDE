@@ -29,7 +29,6 @@ export const Sidebar: React.FC = () => {
 
   const clearForSession = useAgentStore(state => state.clearForSession);
   const setArtifacts = useAgentStore(state => state.setArtifacts);
-  const setFilesChanged = useAgentStore(state => state.setFilesChanged);
   const updateTaskMd = useAgentStore(state => state.updateTaskMd);
 
   const [chatSessions, setChatSessions] = useState<SessionItem[]>([]);

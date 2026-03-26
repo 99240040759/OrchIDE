@@ -258,7 +258,7 @@ export const BuiltInToolNames = {
   // Agent
   UpdateTaskProgress: 'updateTaskProgress',
   CreateArtifact: 'createArtifact',
-  ReportFileChanged: 'reportFileChanged',
+
   TaskBoundary: 'taskBoundary',
   NotifyUser: 'notifyUser',
 } as const;

@@ -38,8 +38,6 @@ export {
   updateTaskProgressTool,
   createArtifactDefinition,
   createArtifactTool,
-  reportFileChangedDefinition,
-  reportFileChangedTool,
   taskBoundaryDefinition,
   taskBoundaryTool,
   notifyUserDefinition,
@@ -72,7 +70,7 @@ export {
 
 import { readFileTool, writeFileTool, createFileTool, deleteFileTool, listDirectoryTool, searchInFilesTool, grepSearchTool, globSearchTool } from './fileTools';
 import { replaceFileContentTool, multiReplaceFileContentTool } from './editTools';
-import { updateTaskProgressTool, createArtifactTool, reportFileChangedTool, taskBoundaryTool, notifyUserTool } from './agentTools';
+import { updateTaskProgressTool, createArtifactTool, taskBoundaryTool, notifyUserTool } from './agentTools';
 import { webSearchTool, fetchUrlTool } from './webTools';
 import { runTerminalCommandTool, startTerminalCommandTool, getCommandStatusTool, sendCommandInputTool } from './terminalTools';
 
@@ -106,7 +104,6 @@ export const ALL_TOOL_DEFINITIONS = {
   // Agent
   updateTaskProgress: updateTaskProgressTool,
   createArtifact: createArtifactTool,
-  reportFileChanged: reportFileChangedTool,
   taskBoundary: taskBoundaryTool,
   notifyUser: notifyUserTool,
 };

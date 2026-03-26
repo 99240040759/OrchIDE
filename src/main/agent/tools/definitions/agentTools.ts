@@ -3,8 +3,7 @@
  *
  * Tools for agent cognitive infrastructure:
  * - updateTaskProgress: checklist tracking
- * - createArtifact: document creation
- * - reportFileChanged: file change tracking
+ * - createArtifact: document deliverables/diagrams
  * - taskBoundary: orchestration mode controller (PLANNING/EXECUTION/VERIFICATION)
  * - notifyUser: user communication gate
  */
@@ -107,48 +106,6 @@ export const createArtifactTool: Omit<Tool, 'execute'> = {
     isCurrently: 'creating artifact "{{{ name }}}"',
     hasAlready: 'created artifact "{{{ name }}}"',
     icon: 'file-text',
-    group: 'agent',
-  },
-  behavior: {
-    readonly: false,
-    isInstant: true,
-    defaultPolicy: 'allowedWithoutPermission',
-    allowsParallel: true,
-  },
-};
-
-// ============================================================================
-// Report File Changed Tool
-// ============================================================================
-
-export const reportFileChangedDefinition: Tool['definition'] = createToolDefinition(
-  'reportFileChanged',
-  `Report that you have created, modified, or deleted a file. Updates the Files Changed panel.
-MANDATORY: Call this after EVERY writeFile, createFile, deleteFile, replaceFileContent, or multiReplaceFileContent operation.`,
-  {
-    required: ['filePath', 'status'],
-    properties: {
-      filePath: {
-        type: 'string',
-        description: 'Path of the file changed',
-      },
-      status: {
-        type: 'string',
-        description: 'What happened: added, modified, or deleted',
-        enum: ['added', 'modified', 'deleted'],
-      },
-    },
-  }
-);
-
-export const reportFileChangedTool: Omit<Tool, 'execute'> = {
-  definition: reportFileChangedDefinition,
-  display: {
-    displayTitle: 'Report File Change',
-    wouldLikeTo: 'report file change: {{{ filePath }}}',
-    isCurrently: 'reporting file change',
-    hasAlready: 'reported file change: {{{ filePath }}}',
-    icon: 'file-diff',
     group: 'agent',
   },
   behavior: {

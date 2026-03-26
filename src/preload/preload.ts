@@ -195,7 +195,6 @@ contextBridge.exposeInMainWorld('orchide', {
       }) => void;
       onTaskUpdate?: (data: { sessionId: string; checklistMd: string }) => void;
       onArtifactCreated?: (data: { sessionId: string; artifact: unknown }) => void;
-      onFileChanged?: (data: { sessionId: string; change: unknown }) => void;
       onSessionTitled?: (data: { sessionId: string; title: string }) => void;
       onTaskBoundary?: (data: {
         sessionId: string;
@@ -236,9 +235,7 @@ contextBridge.exposeInMainWorld('orchide', {
       if (handlers.onArtifactCreated) {
         unsubscribers.push(addListener('agent:artifact-created', handlers.onArtifactCreated as EventCallback));
       }
-      if (handlers.onFileChanged) {
-        unsubscribers.push(addListener('agent:file-changed', handlers.onFileChanged as EventCallback));
-      }
+
       if (handlers.onSessionTitled) {
         unsubscribers.push(addListener('agent:session-titled', handlers.onSessionTitled as EventCallback));
       }
@@ -281,8 +278,7 @@ contextBridge.exposeInMainWorld('orchide', {
     onArtifactCreated: (cb: (data: { sessionId: string; artifact: unknown }) => void) =>
       addListener('agent:artifact-created', cb as EventCallback),
 
-    onFileChanged: (cb: (data: { sessionId: string; change: unknown }) => void) =>
-      addListener('agent:file-changed', cb as EventCallback),
+
 
     onSessionTitled: (cb: (data: { sessionId: string; title: string }) => void) =>
       addListener('agent:session-titled', cb as EventCallback),
@@ -299,7 +295,6 @@ contextBridge.exposeInMainWorld('orchide', {
         'agent:stream-event',
         'agent:task-update',
         'agent:artifact-created',
-        'agent:file-changed',
         'agent:session-titled',
         'agent:agent-event',
         'agent:task-boundary',
@@ -328,8 +323,7 @@ contextBridge.exposeInMainWorld('orchide', {
     getTaskProgress: (sessionId: string) =>
       ipcRenderer.invoke('history:getTaskProgress', sessionId),
 
-    getFilesChanged: (sessionId: string) =>
-      ipcRenderer.invoke('history:getFilesChanged', sessionId),
+
 
     deleteSession: (sessionId: string) =>
       ipcRenderer.invoke('history:deleteSession', sessionId),

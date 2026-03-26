@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import { getDbPath } from './appdata';
-import type { Message, Session, Artifact, FileChange } from '../shared/types';
+import type { Message, Session, Artifact } from '../shared/types';
 
 // DB row types (what we get from SQLite)
 interface SessionRow {
@@ -31,12 +31,7 @@ interface ArtifactRow {
   created_at: number;
 }
 
-interface FileChangedRow {
-  id: string;
-  session_id: string;
-  file_path: string;
-  status: 'added' | 'modified' | 'deleted';
-}
+
 
 interface TaskProgressRow {
   session_id: string;
@@ -94,13 +89,7 @@ function initSchema(db: Database.Database): void {
       FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
     );
 
-    CREATE TABLE IF NOT EXISTS files_changed (
-      id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL,
-      file_path TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'modified',
-      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
-    );
+
   `);
 }
 
@@ -175,19 +164,7 @@ export function getTaskProgress(sessionId: string): string | null {
   return row?.checklist_md ?? null;
 }
 
-// Files Changed
-export function upsertFileChanged(id: string, sessionId: string, filePath: string, status: 'added' | 'modified' | 'deleted'): void {
-  getDb().prepare(`INSERT OR REPLACE INTO files_changed (id, session_id, file_path, status) VALUES (?, ?, ?, ?)`).run(id, sessionId, filePath, status);
-}
 
-export function getFilesChanged(sessionId: string): FileChange[] {
-  const rows = getDb().prepare(`SELECT * FROM files_changed WHERE session_id=?`).all(sessionId) as FileChangedRow[];
-  return rows.map(row => ({
-    id: row.id,
-    filePath: row.file_path,
-    status: row.status,
-  }));
-}
 
 // Helper to convert DB row to Session type
 function sessionRowToSession(row: SessionRow): Session {

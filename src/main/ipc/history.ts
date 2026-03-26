@@ -6,7 +6,6 @@ import {
   deleteSession,
   getArtifacts,
   getTaskProgress,
-  getFilesChanged,
 } from '../db';
 import { deleteSessionDir } from '../appdata';
 
@@ -29,10 +28,6 @@ export function registerHistoryIPC(): void {
 
   ipcMain.handle('history:getTaskProgress', async (_event, sessionId: string) => {
     return getTaskProgress(sessionId);
-  });
-
-  ipcMain.handle('history:getFilesChanged', async (_event, sessionId: string) => {
-    return getFilesChanged(sessionId);
   });
 
   ipcMain.handle('history:deleteSession', async (_event, sessionId: string) => {

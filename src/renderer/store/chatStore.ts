@@ -160,7 +160,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
           return part;
         });
-        return { liveParts: parts };
+        return { liveParts: parts, isThinking: false };
       } else {
         return {
           liveParts: [
@@ -172,6 +172,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               timestamp: Date.now(),
             },
           ],
+          isThinking: false,
         };
       }
     });

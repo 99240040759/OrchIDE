@@ -117,17 +117,6 @@ const App: React.FC = () => {
         });
       },
 
-      // ---- File change (from reportFileChanged tool) -------------------------
-      onFileChanged: (data: { sessionId: string; change: any }) => {
-        if (data.sessionId !== sessionId) return;
-        const c = data.change;
-        useAgentStore.getState().addFileChange({
-          id: c.id || `fc_${Date.now()}`,
-          filePath: c.filePath,
-          status: c.status,
-        });
-      },
-
       // ---- Session titled (auto-generated from first user message) -----------
       onSessionTitled: (data: { sessionId: string; title: string }) => {
         if (data.sessionId !== sessionId) return;
@@ -169,17 +158,7 @@ const App: React.FC = () => {
           useAgentStore.getState().updateTaskMd(taskMd);
         }
 
-        // Load files changed from DB
-        const files = await orchide.history.getFilesChanged(sessionId);
-        if (files && files.length > 0) {
-          useAgentStore.getState().setFilesChanged(
-            files.map((f: any) => ({
-              id: f.id,
-              filePath: f.filePath,
-              status: f.status,
-            }))
-          );
-        }
+
       } catch (error) {
         console.error('[Event Bridge] Failed to load session state:', error);
       }

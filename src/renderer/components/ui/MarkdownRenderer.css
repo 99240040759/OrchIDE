@@ -32,32 +32,52 @@
   text-decoration: underline;
 }
 
-.markdown-renderer pre {
-  background: #0d1117;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 14px 16px;
-  overflow-x: auto;
-  margin: 12px 0;
+.modern-code-block {
+  margin: 16px 0;
+  background: #1e1e1e; /* matches vscDarkPlus */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  overflow: hidden;
 }
 
-.markdown-renderer .hljs,
-.markdown-renderer code[class*="language-"] {
+.modern-code-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.03); /* slight contrast for header */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.modern-code-language {
   font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
-  font-size: 13px;
-  color: #e6edf3;
-  line-height: 1.6;
-  display: block;
+  font-size: 11.5px;
+  color: #8b949e;
+  opacity: 0.8;
 }
 
-.markdown-renderer code:not(.hljs) {
-  background: var(--input-bg);
-  border: 1px solid var(--border-color);
+.modern-code-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.code-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: #8b949e;
+  cursor: pointer;
+  padding: 4px;
   border-radius: 4px;
-  padding: 2px 6px;
-  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
-  font-size: 12.5px;
-  color: #e8ae4c;
+  transition: all 0.2s ease;
+}
+
+.code-action-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #c9d1d9;
 }
 
 .markdown-renderer blockquote {
@@ -141,17 +161,4 @@
   white-space: pre-wrap;
 }
 
-.markdown-renderer .hljs-comment,
-.markdown-renderer .hljs-quote { color: #8b949e; }
-.markdown-renderer .hljs-keyword,
-.markdown-renderer .hljs-selector-tag,
-.markdown-renderer .hljs-literal { color: #ff7b72; }
-.markdown-renderer .hljs-string,
-.markdown-renderer .hljs-doctag,
-.markdown-renderer .hljs-title,
-.markdown-renderer .hljs-section { color: #a5d6ff; }
-.markdown-renderer .hljs-number,
-.markdown-renderer .hljs-attr,
-.markdown-renderer .hljs-template-variable { color: #79c0ff; }
-.markdown-renderer .hljs-function,
-.markdown-renderer .hljs-title.function_ { color: #d2a8ff; }
+

@@ -29,7 +29,6 @@ import {
 import {
   updateTaskProgressImpl,
   createArtifactImpl,
-  reportFileChangedImpl,
   taskBoundaryImpl,
   notifyUserImpl,
 } from './agentTools';
@@ -136,10 +135,6 @@ export const ALL_TOOLS: Record<string, Tool> = {
     ...ALL_TOOL_DEFINITIONS.createArtifact,
     execute: createArtifactImpl,
   },
-  reportFileChanged: {
-    ...ALL_TOOL_DEFINITIONS.reportFileChanged,
-    execute: reportFileChangedImpl,
-  },
   taskBoundary: {
     ...ALL_TOOL_DEFINITIONS.taskBoundary,
     execute: taskBoundaryImpl,
@@ -158,7 +153,7 @@ export const TOOL_GROUPS = {
   search: ['searchInFiles', 'grepSearch', 'globSearch'],
   web: ['webSearch', 'fetchUrl'],
   terminal: ['runTerminalCommand', 'startTerminalCommand', 'getCommandStatus', 'sendCommandInput'],
-  agent: ['updateTaskProgress', 'createArtifact', 'reportFileChanged', 'taskBoundary', 'notifyUser'],
+  agent: ['updateTaskProgress', 'createArtifact', 'taskBoundary', 'notifyUser'],
 } as const;
 
 /**
@@ -196,7 +191,6 @@ export function getToolsForPurpose(purpose: 'planning' | 'implementation' | 'res
         ALL_TOOLS.taskBoundary,
         ALL_TOOLS.notifyUser,
         ALL_TOOLS.updateTaskProgress,
-        ALL_TOOLS.createArtifact,
       ];
     case 'research':
       return [

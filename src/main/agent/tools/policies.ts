@@ -53,7 +53,7 @@ export const DEFAULT_TOOL_POLICIES: Record<string, ToolPolicy> = {
   // Agent tools - auto-approve (they only update UI state)
   updateTaskProgress: 'allowedWithoutPermission',
   createArtifact: 'allowedWithoutPermission',
-  reportFileChanged: 'allowedWithoutPermission',
+
   taskBoundary: 'allowedWithoutPermission',
   notifyUser: 'allowedWithoutPermission',
 };

@@ -1,7 +1,7 @@
 /**
  * Agent Tool Implementations — Antigravity-Level
  *
- * Implements: updateTaskProgress, createArtifact, reportFileChanged,
+ * Implements: updateTaskProgress, createArtifact,
  * taskBoundary, notifyUser
  */
 
@@ -108,43 +108,6 @@ export const createArtifactImpl: Tool['execute'] = async (
     }],
     success: true,
     metadata: { artifactId: artifact.id, filePath },
-  };
-};
-
-// ============================================================================
-// Report File Changed
-// ============================================================================
-
-export const reportFileChangedImpl: Tool['execute'] = async (
-  args: Record<string, unknown>,
-  context: ToolContext
-): Promise<ToolResult> => {
-  const filePath = args.filePath as string;
-  const status = args.status as 'added' | 'modified' | 'deleted';
-
-  if (!filePath || !status) {
-    return {
-      output: [{ name: 'Error', description: 'Missing arguments', content: 'filePath and status are required.' }],
-      success: false,
-      error: 'Missing arguments',
-    };
-  }
-
-  // Resolve to absolute path
-  const absPath = path.isAbsolute(filePath)
-    ? filePath
-    : path.join(context.workspacePath || '', filePath);
-
-  context.sendEvent?.({
-    type: 'file_changed',
-    timestamp: Date.now(),
-    filePath: absPath,
-    status,
-  });
-
-  return {
-    output: [{ name: 'File Change Reported', description: filePath, content: `${status}: ${filePath}` }],
-    success: true,
   };
 };
 

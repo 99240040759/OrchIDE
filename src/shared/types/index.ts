@@ -94,18 +94,6 @@ export interface Artifact {
 }
 
 // ============================================================================
-// File Change Types
-// ============================================================================
-
-export type FileChangeStatus = 'added' | 'modified' | 'deleted';
-
-export interface FileChange {
-  id: string;
-  filePath: string;
-  status: FileChangeStatus;
-}
-
-// ============================================================================
 // Settings Types
 // ============================================================================
 
@@ -155,11 +143,6 @@ export interface TaskUpdateData {
 export interface ArtifactCreatedData {
   sessionId: string;
   artifact: Artifact;
-}
-
-export interface FileChangedData {
-  sessionId: string;
-  change: FileChange;
 }
 
 export interface SessionTitledData {

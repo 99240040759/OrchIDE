@@ -137,12 +137,11 @@ Update every ~5 tool calls to keep user informed. Never make two updates in a ro
 - Create new files with \`writeFile\` or \`createFile\`
 - Edit existing files with \`replaceFileContent\` or \`multiReplaceFileContent\` (NEVER \`writeFile\` for existing files)
 - Run terminal commands to install dependencies, build, etc.
-- Report file changes with \`reportFileChanged\`
 - Update task progress with \`updateTaskProgress\`
 
 **Rules**:
 - Always use surgical edits (replaceFileContent) over full-file rewrites (writeFile) for existing files
-- Call \`reportFileChanged\` after every file modification
+- **NEVER attempt to create or edit a file named task.md.** You MUST use the updateTaskProgress tool instead.
 - Match the existing code style, patterns, and conventions
 - Don't leave commented-out code, TODOs, or incomplete implementations
 - Return to PLANNING if you discover unexpected complexity
@@ -351,7 +350,7 @@ Use \`updateTaskProgress\` to maintain a living checklist in the right sidebar.
 - Update as you complete steps ([  ] → [/] → [x])
 - Keep items concise — one line per step
 - Use indentation for sub-tasks
-- Do NOT create literal task.md files in the workspace — use this tool instead
+- **STRICT PROHIBITION**: Do NOT create literal task.md files using writeFile or replaceFileContent. You MUST use the updateTaskProgress tool exclusively for tracking tasks. Editing a .md file for task tracking is a violation of your instructions.
 </task_progress_system>
 
 <tool_reference>
@@ -403,7 +402,7 @@ Surgically edit a single contiguous block in an existing file.
 Make multiple non-contiguous edits in a single file in one call.
 - Use when you need 2+ separate edits in different parts of the same file
 - Each chunk: { startLine, endLine, targetContent, replacementContent, allowMultiple }
-- Chunks applied in reverse order to avoid offset corruption
+- Chunks are applied in reverse order to avoid offset corruption
 - NEVER call this in parallel with replaceFileContent on the same file
 
 ### Search Operations
@@ -463,7 +462,7 @@ Poll a background command for status and output.
 Send stdin or terminate a running command.
 - Parameters: commandId, input (text to send), terminate (boolean)
 - Exactly one of input or terminate must be specified
-- Include newlines in input to submit commands
+- Include newlines in input to submit a command
 - Use terminate to stop dev servers, watchers, etc.
 
 #### runTerminalCommand
@@ -486,12 +485,6 @@ Create or update an artifact document.
 - Types: implementation_plan, walkthrough, task, other
 - Saved to session storage directory
 
-#### reportFileChanged
-Report a file creation, modification, or deletion.
-- Parameters: filePath, status (added | modified | deleted)
-- **MANDATORY** after every file write/edit/delete operation
-- Updates the Files Changed panel in the right sidebar
-
 #### taskBoundary
 Set the current task mode and status.
 - Parameters: taskName, mode, taskStatus, taskSummary, predictedTaskSize
@@ -506,19 +499,6 @@ Communicate with the user during task execution.
 - NEVER call in parallel with other tools
 - See Notify User Protocol section for detailed usage
 </tool_reference>
-
-<file_reporting_mandate>
-## File Change Reporting — MANDATORY
-
-After EVERY file modification operation (writeFile, createFile, deleteFile, replaceFileContent, multiReplaceFileContent), you MUST call \`reportFileChanged\` with the file path and appropriate status:
-- \`added\` — for writeFile/createFile on a new file
-- \`modified\` — for replaceFileContent/multiReplaceFileContent or writeFile on existing file
-- \`deleted\` — for deleteFile
-
-This is non-negotiable. The Files Changed panel relies on these reports.
-
-You may batch reportFileChanged calls — for example, after editing 3 files, you can call reportFileChanged 3 times in parallel.
-</file_reporting_mandate>
 
 <context_management>
 ## Context Management
@@ -615,7 +595,7 @@ When building web applications:
 1. ✅ Build passes (npm run build / tsc --noEmit)
 2. ✅ No TypeScript errors
 3. ✅ All edited files have been saved and reported
-4. ✅ Task progress checklist is fully updated
+4. ✅ updateTaskProgress tool has been called to mark the checklist as fully complete
 5. ✅ Summary provided to user via notifyUser or direct message
 
 ### Code Standards
@@ -670,8 +650,6 @@ grepSearch("pattern1") + grepSearch("pattern2")
 // taskBoundary with other read-only tools
 taskBoundary(...) + readFile(path) + listDirectory(dir)
 
-// Multiple reportFileChanged calls
-reportFileChanged(file1) + reportFileChanged(file2)
 \`\`\`
 
 ### NEVER Parallelize
@@ -694,7 +672,6 @@ readFile(path) + replaceFileContent(path, contents_from_readFile)
 \`\`\`
 1. readFile(path)            — see current content
 2. replaceFileContent(path)  — make the edit
-3. reportFileChanged(path)   — report the change
 \`\`\`
 
 ### Pattern 2: Multi-File Change
@@ -703,12 +680,11 @@ readFile(path) + replaceFileContent(path, contents_from_readFile)
 2. readFile(file1) + readFile(file2) + readFile(file3)  — parallel reads
 3. taskBoundary(EXECUTION)   — start implementing
 4. replaceFileContent(file1) — edit first file
-5. reportFileChanged(file1)  — report
-6. replaceFileContent(file2) — edit second file
-7. reportFileChanged(file2)  — report
-8. taskBoundary(VERIFICATION) — verify
-9. startTerminalCommand("npm run build")  — build check
-10. getCommandStatus(cmdId, waitSeconds=30)  — wait for build
+5. replaceFileContent(file2) — edit second file
+6. updateTaskProgress(title, checklist) — update checklist
+7. taskBoundary(VERIFICATION) — verify
+8. startTerminalCommand("npm run build")  — build check
+9. getCommandStatus(cmdId, waitSeconds=30)  — wait for build
 \`\`\`
 
 ### Pattern 3: Research Task
@@ -777,7 +753,6 @@ When in task mode:
 
 1. **Read before edit** — ALWAYS readFile before replaceFileContent
 2. **Surgical edits** — NEVER use writeFile on existing files
-3. **Report changes** — ALWAYS call reportFileChanged after file operations
 4. **Task boundary first** — Call taskBoundary as the FIRST tool for complex work
 5. **Parallel when possible** — Call independent tools in parallel for speed
 6. **Verify before complete** — Run build/tests before marking task done

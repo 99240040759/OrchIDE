@@ -10,7 +10,6 @@ import type {
   AgentRunParams,
   Message,
   Artifact,
-  FileChange,
 } from '../shared/types';
 
 // ============================================================================
@@ -61,9 +60,7 @@ export interface AgentEventHandlers {
   onStreamEnd?: (data: { sessionId: string }) => void;
   onStreamError?: (data: { sessionId: string; error: string }) => void;
   onTaskUpdate?: (data: { sessionId: string; checklistMd: string }) => void;
-  onArtifactCreated?: (data: { sessionId: string; artifact: Artifact }) => void;
-  onFileChanged?: (data: { sessionId: string; change: FileChange }) => void;
-  onSessionTitled?: (data: { sessionId: string; title: string }) => void;
+
 }
 
 export interface OrchideAgentAPI {
@@ -83,9 +80,7 @@ export interface OrchideAgentAPI {
   onStreamEnd: (cb: (data: { sessionId: string }) => void) => () => void;
   onStreamError: (cb: (data: { sessionId: string; error: string }) => void) => () => void;
   onTaskUpdate: (cb: (data: { sessionId: string; checklistMd: string }) => void) => () => void;
-  onArtifactCreated: (cb: (data: { sessionId: string; artifact: Artifact }) => void) => () => void;
-  onFileChanged: (cb: (data: { sessionId: string; change: FileChange }) => void) => () => void;
-  onSessionTitled: (cb: (data: { sessionId: string; title: string }) => void) => () => void;
+
 
   removeAllListeners: () => void;
 }
@@ -109,8 +104,7 @@ export interface OrchideHistoryAPI {
   getWorkspaceSessions: (workspacePath: string) => Promise<Session[]>;
   getMessages: (sessionId: string) => Promise<Message[]>;
   getArtifacts: (sessionId: string) => Promise<Artifact[]>;
-  getTaskProgress: (sessionId: string) => Promise<string | null>;
-  getFilesChanged: (sessionId: string) => Promise<FileChange[]>;
+
   deleteSession: (sessionId: string) => Promise<void>;
 }
 

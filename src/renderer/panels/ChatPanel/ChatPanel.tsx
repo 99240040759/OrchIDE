@@ -53,8 +53,6 @@ const KNOWN_TOOL_NAMES = new Set([
   'runTerminalCommand',
   'fetchUrl',
   'updateTaskProgress',
-  'createArtifact',
-  'reportFileChanged',
   'replaceFileContent',
   'multiReplaceFileContent',
   'startTerminalCommand',
@@ -162,7 +160,6 @@ function getToolIcon(toolName: string) {
     fetchUrl: <Link size={14} />,
     updateTaskProgress: <CheckCircle size={14} />,
     createArtifact: <FileText size={14} />,
-    reportFileChanged: <Flag size={14} />,
     replaceFileContent: <Replace size={14} />,
     multiReplaceFileContent: <Layers size={14} />,
     startTerminalCommand: <PlayCircle size={14} />,
@@ -192,7 +189,6 @@ function getToolAction(toolName: string, completed = false): string {
     fetchUrl: { running: 'Fetching', completed: 'Fetched' },
     updateTaskProgress: { running: 'Updating', completed: 'Updated' },
     createArtifact: { running: 'Creating', completed: 'Created' },
-    reportFileChanged: { running: 'Reporting', completed: 'Reported' },
     replaceFileContent: { running: 'Editing', completed: 'Edited' },
     multiReplaceFileContent: { running: 'Editing', completed: 'Edited' },
     startTerminalCommand: { running: 'Starting', completed: 'Started' },
@@ -285,15 +281,6 @@ function extractFileInfo(toolName: string, args: Record<string, unknown>): {
     return { details: 'Artifact' };
   }
 
-  if (toolName === 'reportFileChanged') {
-    const filePath = (args.filePath || args.targetPath) as string;
-    const status = args.status as string;
-    const fileName = filePath ? filePath.split('/').pop() || filePath : undefined;
-    if (fileName && status) return { fileName, details: status };
-    if (fileName) return { fileName };
-    if (status) return { details: status };
-  }
-
   if (toolName === 'taskBoundary') {
     const taskName = args.TaskName as string;
     const mode = args.Mode as string;
@@ -348,35 +335,44 @@ const InlineToolChip: React.FC<{ part: LivePart }> = ({ part }) => {
 };
 
 /**
- * Thinking/reasoning dropdown component
+ * Thinking/reasoning component (invisible block layout)
  */
 const ThinkingBlock: React.FC<{ content: string; isLive?: boolean }> = ({ content, isLive }) => {
   const [isExpanded, setIsExpanded] = useState(!!isLive);
+  const contentRef = useRef<HTMLDivElement>(null);
 
-  // Auto-expand when live thinking starts
+  // Auto-expand when live
   useEffect(() => {
     if (isLive) setIsExpanded(true);
   }, [isLive]);
 
-  // Auto-collapse when thinking ends (isLive goes false)
+  // Auto-collapse when done
   useEffect(() => {
     if (!isLive && content) {
-      const timer = setTimeout(() => setIsExpanded(false), 800);
+      const timer = setTimeout(() => setIsExpanded(false), 200);
       return () => clearTimeout(timer);
     }
   }, [isLive, content]);
 
+  // Auto-scroll to bottom of the thinking block when live
+  useEffect(() => {
+    if (isLive && isExpanded && contentRef.current) {
+      contentRef.current.scrollTop = contentRef.current.scrollHeight;
+    }
+  }, [content, isLive, isExpanded]);
+
   if (!content) return null;
 
   return (
-    <div className={`thinking-block ${isExpanded ? 'expanded' : 'collapsed'} ${isLive ? 'live' : ''}`}>
-      <button className="thinking-toggle" onClick={() => setIsExpanded(!isExpanded)}>
-        <Brain size={14} className={isLive ? 'thinking-brain spinning' : 'thinking-brain'} />
-        <span className="thinking-label">{isLive ? 'Thinking…' : 'Thought process'}</span>
-        {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+    <div className={`thinking-inline ${isLive ? 'live' : 'completed'} ${isExpanded ? 'expanded' : 'collapsed'}`}>
+      <button className="thinking-inline-toggle" onClick={() => setIsExpanded(!isExpanded)}>
+        <Brain size={12} className={isLive ? 'thinking-brain spinning' : 'thinking-brain'} />
+        <span>{isLive ? 'Thinking...' : 'Thought process'}</span>
+        {isExpanded ? <ChevronDown size={12} style={{marginLeft: 'auto', opacity: 0.5}}/> : <ChevronRight size={12} style={{marginLeft: 'auto', opacity: 0.5}}/>}
       </button>
+      
       {isExpanded && (
-        <div className="thinking-content">
+        <div className="thinking-inline-content" ref={contentRef}>
           <MarkdownRenderer content={content} className="thinking-text-content" />
         </div>
       )}
@@ -449,14 +445,16 @@ const PartsTimeline: React.FC<{ parts: LivePart[]; keyPrefix: string; isLive?: b
 
   return (
     <>
-      {groups.map((group) => {
+      {groups.map((group, index) => {
         if (group.kind === 'thinking') {
+          const isLastGroup = index === groups.length - 1;
           return (
-            <ThinkingBlock
-              key={group.key}
-              content={group.text}
-              isLive={isLive && isThinking}
-            />
+            <div key={group.key} className="message-part-group">
+              <ThinkingBlock
+                content={group.text}
+                isLive={isLive && isThinking && isLastGroup}
+              />
+            </div>
           );
         }
 
@@ -544,7 +542,7 @@ export const ChatPanel: React.FC = () => {
 
     const onScroll = () => {
       const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-      shouldAutoScrollRef.current = distanceFromBottom < 96;
+      shouldAutoScrollRef.current = distanceFromBottom < 250;
     };
 
     onScroll();
@@ -552,19 +550,37 @@ export const ChatPanel: React.FC = () => {
     return () => container.removeEventListener('scroll', onScroll);
   }, []);
 
-  // Auto-scroll on new content
+  // Auto-scroll on DOM mutations (the most bulletproof method)
   useEffect(() => {
     const container = threadMessagesRef.current;
-    if (!container || !shouldAutoScrollRef.current) return;
+    if (!container) return;
 
-    const behavior: ScrollBehavior = isStreaming ? 'auto' : 'smooth';
-    requestAnimationFrame(() => {
+    const scrollToBottom = () => {
+      if (!shouldAutoScrollRef.current) return;
+      
+      const behavior: ScrollBehavior = isStreaming ? 'auto' : 'smooth';
       container.scrollTo({
         top: container.scrollHeight,
         behavior,
       });
+    };
+
+    // Scroll immediately on setup
+    requestAnimationFrame(scrollToBottom);
+
+    // Watch for ANY changes to the DOM inside the chat
+    const observer = new MutationObserver(() => {
+      requestAnimationFrame(scrollToBottom);
     });
-  }, [messages.length, liveParts.length, streamingContent, isStreaming]);
+
+    observer.observe(container, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+
+    return () => observer.disconnect();
+  }, [isStreaming]);
 
   const isEmpty = messages.length === 0 && !isStreaming;
 

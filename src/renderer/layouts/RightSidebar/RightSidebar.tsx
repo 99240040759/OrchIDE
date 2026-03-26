@@ -6,8 +6,7 @@
 import React, { useCallback } from 'react';
 import {
   ExternalLink, Info, CheckCircle2, Circle, Loader2,
-  FileText, ListTodo, BookOpen, Map,
-  Plus, Minus, Edit3
+  FileText, ListTodo, BookOpen, Map
 } from 'lucide-react';
 import { useAgentStore } from '../../store/agentStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
@@ -23,19 +22,12 @@ const ARTIFACT_ICONS: Record<string, React.ReactNode> = {
   FileText: <FileText size={14} />,
 };
 
-const FILE_STATUS_ICONS: Record<string, React.ReactNode> = {
-  added: <Plus size={11} className="status-icon added" />,
-  modified: <Edit3 size={11} className="status-icon modified" />,
-  deleted: <Minus size={11} className="status-icon deleted" />,
-};
-
 const orchide = (window as any).orchide;
 
 export const RightSidebar: React.FC = () => {
   const taskTitle = useAgentStore(state => state.taskTitle);
   const taskItems = useAgentStore(state => state.taskItems);
   const artifacts = useAgentStore(state => state.artifacts);
-  const filesChanged = useAgentStore(state => state.filesChanged);
   const agentState = useAgentStore(state => state.agentState);
 
   const openFile = useWorkspaceStore(state => state.openFile);
@@ -56,25 +48,6 @@ export const RightSidebar: React.FC = () => {
         content: result.content,
         isDirty: false,
         language: 'markdown',
-      });
-      useLayoutStore.getState().setEditorOpen(true);
-    }
-  }, [openFile]);
-
-  // Open a changed file
-  const openChangedFile = useCallback(async (filePath: string) => {
-    if (!orchide) return;
-
-    const result = await orchide.fs.readFile(filePath);
-    const name = getFilename(filePath);
-
-    if (result?.content != null) {
-      openFile({
-        path: filePath,
-        name,
-        content: result.content,
-        isDirty: false,
-        language: getLanguageFromFilename(name),
       });
       useLayoutStore.getState().setEditorOpen(true);
     }
@@ -159,31 +132,6 @@ export const RightSidebar: React.FC = () => {
               </div>
             </div>
           ))
-        )}
-      </div>
-
-      {/* FILES CHANGED */}
-      <div className="rs-section">
-        <div className="rs-header">
-          <span>Files Changed</span>
-        </div>
-        {filesChanged.length === 0 ? (
-          <div className="rs-empty text-muted">No file changes</div>
-        ) : (
-          filesChanged.map(fc => {
-            const name = getFilename(fc.filePath);
-            return (
-              <div
-                key={fc.id}
-                className="rs-item file-change-item"
-                onClick={() => fc.status !== 'deleted' && openChangedFile(fc.filePath)}
-                title={fc.filePath}
-              >
-                <span className="file-change-status">{FILE_STATUS_ICONS[fc.status]}</span>
-                <span className={`item-text file-change-name ${fc.status}`}>{name}</span>
-              </div>
-            );
-          })
         )}
       </div>
 

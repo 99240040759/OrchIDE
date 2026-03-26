@@ -340,7 +340,7 @@ export interface NotifyUserData {
 export type AgentEventType =
   | 'task_progress'
   | 'artifact_created'
-  | 'file_changed'
+
   | 'plan_created'
   | 'plan_updated'
   | 'plan_step_updated'

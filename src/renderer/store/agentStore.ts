@@ -28,12 +28,6 @@ export interface Artifact {
   sessionId: string;
 }
 
-export interface FileChange {
-  id: string;
-  filePath: string;
-  status: 'added' | 'modified' | 'deleted';
-}
-
 /** Agent lifecycle phase — drives UI indicators */
 export type AgentState = 'idle' | 'generating' | 'error';
 
@@ -45,7 +39,6 @@ interface AgentStoreState {
 
   // Artifacts and files
   artifacts: Artifact[];
-  filesChanged: FileChange[];
 
   // Agent state
   agentState: AgentState;
@@ -69,10 +62,6 @@ interface AgentStoreState {
   // Actions - Artifacts
   addArtifact: (artifact: Artifact) => void;
   setArtifacts: (artifacts: Artifact[]) => void;
-
-  // Actions - Files
-  addFileChange: (change: FileChange) => void;
-  setFilesChanged: (changes: FileChange[]) => void;
 
   // Actions - Agent state
   setAgentState: (state: AgentState) => void;
@@ -167,7 +156,6 @@ export const useAgentStore = create<AgentStoreState>((set) => ({
   taskItems: [],
   rawTaskMd: '',
   artifacts: [],
-  filesChanged: [],
   agentState: 'idle',
 
   // Task boundary
@@ -202,20 +190,6 @@ export const useAgentStore = create<AgentStoreState>((set) => ({
 
   setArtifacts: (artifacts) => set({ artifacts }),
 
-  addFileChange: (change) => {
-    set(state => {
-      const existing = state.filesChanged.findIndex(f => f.filePath === change.filePath);
-      if (existing >= 0) {
-        const updated = [...state.filesChanged];
-        updated[existing] = change;
-        return { filesChanged: updated };
-      }
-      return { filesChanged: [...state.filesChanged, change] };
-    });
-  },
-
-  setFilesChanged: (changes) => set({ filesChanged: changes }),
-
   setAgentState: (agentState) => set({ agentState }),
 
   setTaskBoundary: (mode, name, status, summary, predictedSize) => set({
@@ -245,7 +219,6 @@ export const useAgentStore = create<AgentStoreState>((set) => ({
     taskItems: [],
     rawTaskMd: '',
     artifacts: [],
-    filesChanged: [],
     agentState: 'idle',
     taskBoundaryMode: null,
     taskBoundaryName: '',

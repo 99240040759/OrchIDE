@@ -29,7 +29,6 @@ import {
   updateSessionTitle,
   insertArtifact,
   upsertTaskProgress,
-  upsertFileChanged,
 } from '../db';
 
 // ============================================================================
@@ -436,19 +435,7 @@ function setupSessionListeners(
         }
         break;
       }
-      case 'file_changed': {
-        const filePath = evt.filePath as string;
-        const status = evt.status as 'added' | 'modified' | 'deleted';
-        const changeId = `fc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-        // Persist to DB
-        upsertFileChanged(changeId, sessionId, filePath, status);
-        // Send to renderer
-        win.webContents.send('agent:file-changed', {
-          sessionId,
-          change: { id: changeId, filePath, status },
-        });
-        break;
-      }
+
       case 'plan_created':
       case 'plan_step_updated':
         win.webContents.send('agent:agent-event', { sessionId, event });

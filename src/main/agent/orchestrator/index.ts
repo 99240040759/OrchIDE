@@ -1,6 +1,6 @@
 /**
  * Orchestrator Index
- * 
+ *
  * Exports all orchestrator components.
  */
 
@@ -9,7 +9,5 @@ export type { AgentSessionConfig, AgentSessionEvents, SessionState } from './ses
 
 export { ToolLoop } from './toolLoop';
 export type { ToolLoopConfig } from './toolLoop';
-
-export { PlanManager } from './plan';
 
 export { ContextManager } from './context';

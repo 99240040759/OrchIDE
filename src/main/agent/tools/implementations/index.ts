@@ -1,13 +1,13 @@
 /**
- * Tool Implementations Index
- * 
- * Central registration of all tool implementations.
+ * Tool Implementations Index — Antigravity-Level
+ *
+ * Central registration of all 21 tool implementations.
  */
 
 import type { Tool } from '../types';
 import { ALL_TOOL_DEFINITIONS } from '../definitions';
 
-// Import implementations
+// File tools
 import {
   readFileImpl,
   writeFileImpl,
@@ -19,28 +19,39 @@ import {
   globSearchImpl,
 } from './fileTools';
 
+// Surgical edit tools
+import {
+  replaceFileContentImpl,
+  multiReplaceFileContentImpl,
+} from './editTools';
+
+// Agent tools
 import {
   updateTaskProgressImpl,
   createArtifactImpl,
   reportFileChangedImpl,
+  taskBoundaryImpl,
+  notifyUserImpl,
 } from './agentTools';
 
+// Web tools
 import {
   webSearchImpl,
   fetchUrlImpl,
 } from './webTools';
 
+// Terminal tools
 import {
   runTerminalCommandImpl,
+  startTerminalCommandImpl,
+  getCommandStatusImpl,
+  sendCommandInputImpl,
 } from './terminalTools';
 
 // ============================================================================
 // Complete Tool Registry
 // ============================================================================
 
-/**
- * All tools with their definitions and implementations combined.
- */
 export const ALL_TOOLS: Record<string, Tool> = {
   // File operations
   readFile: {
@@ -63,7 +74,17 @@ export const ALL_TOOLS: Record<string, Tool> = {
     ...ALL_TOOL_DEFINITIONS.listDirectory,
     execute: listDirectoryImpl,
   },
-  
+
+  // Surgical edits
+  replaceFileContent: {
+    ...ALL_TOOL_DEFINITIONS.replaceFileContent,
+    execute: replaceFileContentImpl,
+  },
+  multiReplaceFileContent: {
+    ...ALL_TOOL_DEFINITIONS.multiReplaceFileContent,
+    execute: multiReplaceFileContentImpl,
+  },
+
   // Search
   searchInFiles: {
     ...ALL_TOOL_DEFINITIONS.searchInFiles,
@@ -77,7 +98,7 @@ export const ALL_TOOLS: Record<string, Tool> = {
     ...ALL_TOOL_DEFINITIONS.globSearch,
     execute: globSearchImpl,
   },
-  
+
   // Web
   webSearch: {
     ...ALL_TOOL_DEFINITIONS.webSearch,
@@ -87,13 +108,25 @@ export const ALL_TOOLS: Record<string, Tool> = {
     ...ALL_TOOL_DEFINITIONS.fetchUrl,
     execute: fetchUrlImpl,
   },
-  
+
   // Terminal
   runTerminalCommand: {
     ...ALL_TOOL_DEFINITIONS.runTerminalCommand,
     execute: runTerminalCommandImpl,
   },
-  
+  startTerminalCommand: {
+    ...ALL_TOOL_DEFINITIONS.startTerminalCommand,
+    execute: startTerminalCommandImpl,
+  },
+  getCommandStatus: {
+    ...ALL_TOOL_DEFINITIONS.getCommandStatus,
+    execute: getCommandStatusImpl,
+  },
+  sendCommandInput: {
+    ...ALL_TOOL_DEFINITIONS.sendCommandInput,
+    execute: sendCommandInputImpl,
+  },
+
   // Agent
   updateTaskProgress: {
     ...ALL_TOOL_DEFINITIONS.updateTaskProgress,
@@ -107,17 +140,25 @@ export const ALL_TOOLS: Record<string, Tool> = {
     ...ALL_TOOL_DEFINITIONS.reportFileChanged,
     execute: reportFileChangedImpl,
   },
+  taskBoundary: {
+    ...ALL_TOOL_DEFINITIONS.taskBoundary,
+    execute: taskBoundaryImpl,
+  },
+  notifyUser: {
+    ...ALL_TOOL_DEFINITIONS.notifyUser,
+    execute: notifyUserImpl,
+  },
 };
 
 /**
- * Get tool names grouped by category
+ * Tool groups for UI organization
  */
 export const TOOL_GROUPS = {
-  file: ['readFile', 'writeFile', 'createFile', 'deleteFile', 'listDirectory'],
+  file: ['readFile', 'writeFile', 'createFile', 'deleteFile', 'listDirectory', 'replaceFileContent', 'multiReplaceFileContent'],
   search: ['searchInFiles', 'grepSearch', 'globSearch'],
   web: ['webSearch', 'fetchUrl'],
-  terminal: ['runTerminalCommand'],
-  agent: ['updateTaskProgress', 'createArtifact', 'reportFileChanged'],
+  terminal: ['runTerminalCommand', 'startTerminalCommand', 'getCommandStatus', 'sendCommandInput'],
+  agent: ['updateTaskProgress', 'createArtifact', 'reportFileChanged', 'taskBoundary', 'notifyUser'],
 } as const;
 
 /**
@@ -152,6 +193,10 @@ export function getToolsForPurpose(purpose: 'planning' | 'implementation' | 'res
         ALL_TOOLS.readFile,
         ALL_TOOLS.searchInFiles,
         ALL_TOOLS.globSearch,
+        ALL_TOOLS.taskBoundary,
+        ALL_TOOLS.notifyUser,
+        ALL_TOOLS.updateTaskProgress,
+        ALL_TOOLS.createArtifact,
       ];
     case 'research':
       return [
@@ -162,6 +207,7 @@ export function getToolsForPurpose(purpose: 'planning' | 'implementation' | 'res
         ALL_TOOLS.globSearch,
         ALL_TOOLS.webSearch,
         ALL_TOOLS.fetchUrl,
+        ALL_TOOLS.taskBoundary,
       ];
     case 'implementation':
       return Object.values(ALL_TOOLS);

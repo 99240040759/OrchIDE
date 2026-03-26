@@ -245,6 +245,17 @@ export function registerAgentIPCNew(): void {
     saveSettings(settings);
     return { success: true };
   });
+  // --------------------------------------------------------------------------
+  // Resume from notifyUser block
+  // --------------------------------------------------------------------------
+  ipcMain.handle('agent:resume-notify', async (_event, sessionId: string) => {
+    const session = activeSessions.get(sessionId);
+    if (session) {
+      session.resumeFromNotify();
+      return { resumed: true };
+    }
+    return { error: 'Session not found' };
+  });
 
   console.log('[Agent IPC] All handlers registered');
 }
@@ -291,6 +302,15 @@ function setupSessionListeners(
         win.webContents.send('agent:stream-event', {
           sessionId,
           type: 'text-delta',
+          data: { text: data.text },
+        });
+        break;
+
+      // ---- Reasoning/Thinking streaming (NVIDIA models) --------------------
+      case 'reasoning_delta':
+        win.webContents.send('agent:stream-event', {
+          sessionId,
+          type: 'reasoning-delta',
           data: { text: data.text },
         });
         break;
@@ -431,10 +451,35 @@ function setupSessionListeners(
       }
       case 'plan_created':
       case 'plan_step_updated':
-        // Plans are tracked by the session/planManager internally.
-        // We forward the raw event for future extensibility.
         win.webContents.send('agent:agent-event', { sessionId, event });
         break;
+      case 'task_boundary': {
+        const tb = evt.taskBoundary as Record<string, unknown> | undefined;
+        if (tb) {
+          win.webContents.send('agent:task-boundary', {
+            sessionId,
+            taskName: tb.taskName,
+            mode: tb.mode,
+            taskStatus: tb.taskStatus,
+            taskSummary: tb.taskSummary,
+            predictedTaskSize: tb.predictedTaskSize,
+          });
+        }
+        break;
+      }
+      case 'notify_user': {
+        const nu = evt.notifyUser as Record<string, unknown> | undefined;
+        if (nu) {
+          win.webContents.send('agent:notify-user', {
+            sessionId,
+            message: nu.message,
+            pathsToReview: nu.pathsToReview,
+            blockedOnUser: nu.blockedOnUser,
+            shouldAutoProceed: nu.shouldAutoProceed,
+          });
+        }
+        break;
+      }
       default:
         win.webContents.send('agent:agent-event', { sessionId, event });
         break;

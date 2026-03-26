@@ -1,7 +1,7 @@
 /**
- * Tool Definitions Index
- * 
- * Exports all tool definitions for easy import.
+ * Tool Definitions Index — Antigravity-Level
+ *
+ * Exports all tool definitions for registration.
  */
 
 // File tools
@@ -24,6 +24,14 @@ export {
   globSearchTool,
 } from './fileTools';
 
+// Surgical edit tools
+export {
+  replaceFileContentDefinition,
+  replaceFileContentTool,
+  multiReplaceFileContentDefinition,
+  multiReplaceFileContentTool,
+} from './editTools';
+
 // Agent tools
 export {
   updateTaskProgressDefinition,
@@ -32,6 +40,10 @@ export {
   createArtifactTool,
   reportFileChangedDefinition,
   reportFileChangedTool,
+  taskBoundaryDefinition,
+  taskBoundaryTool,
+  notifyUserDefinition,
+  notifyUserTool,
 } from './agentTools';
 
 // Web tools
@@ -46,13 +58,23 @@ export {
 export {
   runTerminalCommandDefinition,
   runTerminalCommandTool,
+  startTerminalCommandDefinition,
+  startTerminalCommandTool,
+  getCommandStatusDefinition,
+  getCommandStatusTool,
+  sendCommandInputDefinition,
+  sendCommandInputTool,
 } from './terminalTools';
 
-// All tool definitions for quick access
+// ==========================================================================
+// All tool definitions map
+// ==========================================================================
+
 import { readFileTool, writeFileTool, createFileTool, deleteFileTool, listDirectoryTool, searchInFilesTool, grepSearchTool, globSearchTool } from './fileTools';
-import { updateTaskProgressTool, createArtifactTool, reportFileChangedTool } from './agentTools';
+import { replaceFileContentTool, multiReplaceFileContentTool } from './editTools';
+import { updateTaskProgressTool, createArtifactTool, reportFileChangedTool, taskBoundaryTool, notifyUserTool } from './agentTools';
 import { webSearchTool, fetchUrlTool } from './webTools';
-import { runTerminalCommandTool } from './terminalTools';
+import { runTerminalCommandTool, startTerminalCommandTool, getCommandStatusTool, sendCommandInputTool } from './terminalTools';
 
 export const ALL_TOOL_DEFINITIONS = {
   // File operations
@@ -61,23 +83,32 @@ export const ALL_TOOL_DEFINITIONS = {
   createFile: createFileTool,
   deleteFile: deleteFileTool,
   listDirectory: listDirectoryTool,
-  
+
+  // Surgical edits
+  replaceFileContent: replaceFileContentTool,
+  multiReplaceFileContent: multiReplaceFileContentTool,
+
   // Search
   searchInFiles: searchInFilesTool,
   grepSearch: grepSearchTool,
   globSearch: globSearchTool,
-  
+
   // Web
   webSearch: webSearchTool,
   fetchUrl: fetchUrlTool,
-  
+
   // Terminal
   runTerminalCommand: runTerminalCommandTool,
-  
+  startTerminalCommand: startTerminalCommandTool,
+  getCommandStatus: getCommandStatusTool,
+  sendCommandInput: sendCommandInputTool,
+
   // Agent
   updateTaskProgress: updateTaskProgressTool,
   createArtifact: createArtifactTool,
   reportFileChanged: reportFileChangedTool,
+  taskBoundary: taskBoundaryTool,
+  notifyUser: notifyUserTool,
 };
 
 export type ToolName = keyof typeof ALL_TOOL_DEFINITIONS;

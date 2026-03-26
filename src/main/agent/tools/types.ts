@@ -237,6 +237,8 @@ export const BuiltInToolNames = {
   CreateFile: 'createFile',
   DeleteFile: 'deleteFile',
   ListDirectory: 'listDirectory',
+  ReplaceFileContent: 'replaceFileContent',
+  MultiReplaceFileContent: 'multiReplaceFileContent',
   
   // Search
   GrepSearch: 'grepSearch',
@@ -245,6 +247,9 @@ export const BuiltInToolNames = {
   
   // Terminal
   RunTerminalCommand: 'runTerminalCommand',
+  StartTerminalCommand: 'startTerminalCommand',
+  GetCommandStatus: 'getCommandStatus',
+  SendCommandInput: 'sendCommandInput',
   
   // Web
   WebSearch: 'webSearch',
@@ -254,10 +259,8 @@ export const BuiltInToolNames = {
   UpdateTaskProgress: 'updateTaskProgress',
   CreateArtifact: 'createArtifact',
   ReportFileChanged: 'reportFileChanged',
-  
-  // Plan
-  CreatePlan: 'createPlan',
-  UpdatePlanStep: 'updatePlanStep',
+  TaskBoundary: 'taskBoundary',
+  NotifyUser: 'notifyUser',
 } as const;
 
 export type BuiltInToolName = typeof BuiltInToolNames[keyof typeof BuiltInToolNames];
@@ -314,6 +317,8 @@ export function isEditTool(toolName: string): boolean {
     BuiltInToolNames.WriteFile,
     BuiltInToolNames.CreateFile,
     BuiltInToolNames.DeleteFile,
+    BuiltInToolNames.ReplaceFileContent,
+    BuiltInToolNames.MultiReplaceFileContent,
   ];
   return editTools.includes(toolName);
 }

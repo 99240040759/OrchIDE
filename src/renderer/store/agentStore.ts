@@ -50,6 +50,19 @@ interface AgentStoreState {
   // Agent state
   agentState: AgentState;
 
+  // Task boundary (Antigravity-level orchestration)
+  taskBoundaryMode: 'PLANNING' | 'EXECUTION' | 'VERIFICATION' | null;
+  taskBoundaryName: string;
+  taskBoundaryStatus: string;
+  taskBoundarySummary: string;
+  predictedTaskSize: number | null;
+
+  // Notify user
+  isAwaitingNotify: boolean;
+  notifyMessage: string;
+  notifyPaths: string[];
+  notifyBlockedOnUser: boolean;
+
   // Actions - Task
   updateTaskMd: (md: string) => void;
 
@@ -63,6 +76,13 @@ interface AgentStoreState {
 
   // Actions - Agent state
   setAgentState: (state: AgentState) => void;
+
+  // Actions - Task boundary
+  setTaskBoundary: (mode: string, name: string, status: string, summary: string, predictedSize?: number) => void;
+
+  // Actions - Notify user
+  setNotifyUser: (message: string, paths: string[], blockedOnUser: boolean) => void;
+  clearNotify: () => void;
 
   // Actions - Session lifecycle
   clearForSession: () => void;
@@ -150,6 +170,19 @@ export const useAgentStore = create<AgentStoreState>((set) => ({
   filesChanged: [],
   agentState: 'idle',
 
+  // Task boundary
+  taskBoundaryMode: null,
+  taskBoundaryName: '',
+  taskBoundaryStatus: '',
+  taskBoundarySummary: '',
+  predictedTaskSize: null,
+
+  // Notify user
+  isAwaitingNotify: false,
+  notifyMessage: '',
+  notifyPaths: [],
+  notifyBlockedOnUser: false,
+
   updateTaskMd: (md) => {
     const { title, items } = parseTaskMd(md);
     set({ rawTaskMd: md, taskTitle: title, taskItems: items });
@@ -185,6 +218,28 @@ export const useAgentStore = create<AgentStoreState>((set) => ({
 
   setAgentState: (agentState) => set({ agentState }),
 
+  setTaskBoundary: (mode, name, status, summary, predictedSize) => set({
+    taskBoundaryMode: mode as AgentStoreState['taskBoundaryMode'],
+    taskBoundaryName: name,
+    taskBoundaryStatus: status,
+    taskBoundarySummary: summary,
+    predictedTaskSize: predictedSize ?? null,
+  }),
+
+  setNotifyUser: (message, paths, blockedOnUser) => set({
+    isAwaitingNotify: true,
+    notifyMessage: message,
+    notifyPaths: paths,
+    notifyBlockedOnUser: blockedOnUser,
+  }),
+
+  clearNotify: () => set({
+    isAwaitingNotify: false,
+    notifyMessage: '',
+    notifyPaths: [],
+    notifyBlockedOnUser: false,
+  }),
+
   clearForSession: () => set({
     taskTitle: '',
     taskItems: [],
@@ -192,5 +247,14 @@ export const useAgentStore = create<AgentStoreState>((set) => ({
     artifacts: [],
     filesChanged: [],
     agentState: 'idle',
+    taskBoundaryMode: null,
+    taskBoundaryName: '',
+    taskBoundaryStatus: '',
+    taskBoundarySummary: '',
+    predictedTaskSize: null,
+    isAwaitingNotify: false,
+    notifyMessage: '',
+    notifyPaths: [],
+    notifyBlockedOnUser: false,
   }),
 }));

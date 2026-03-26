@@ -1,9 +1,9 @@
 /**
  * ChatPanel - Live dynamic chat interface
- * Renders messages, streaming text, and inline tool chips
+ * Renders messages, streaming text, thinking dropdown, and inline tool chips
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useChatStore, LivePart } from '../../store/chatStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { InputBar } from '../InputBar/InputBar';
@@ -20,14 +20,24 @@ import {
   FileSearch,
   Terminal,
   Link,
-  ClipboardList,
-  ListChecks,
+  ChevronDown,
+  ChevronRight,
+  Brain,
+  Replace,
+  Layers,
+  Send,
+  Eye,
+  PlayCircle,
+  Activity,
+  Flag,
+  Bell,
 } from 'lucide-react';
 import { MarkdownRenderer } from '../../components/ui/MarkdownRenderer';
 import './ChatPanel.css';
 
 type TimelineGroup =
   | { kind: 'text'; key: string; text: string }
+  | { kind: 'thinking'; key: string; text: string }
   | { kind: 'tools'; key: string; tools: LivePart[] };
 
 const KNOWN_TOOL_NAMES = new Set([
@@ -45,8 +55,13 @@ const KNOWN_TOOL_NAMES = new Set([
   'updateTaskProgress',
   'createArtifact',
   'reportFileChanged',
-  'createPlan',
-  'updatePlanStep',
+  'replaceFileContent',
+  'multiReplaceFileContent',
+  'startTerminalCommand',
+  'getCommandStatus',
+  'sendCommandInput',
+  'taskBoundary',
+  'notifyUser',
 ]);
 
 function updateBraceDepth(input: string, initialDepth: number): number {
@@ -147,9 +162,14 @@ function getToolIcon(toolName: string) {
     fetchUrl: <Link size={14} />,
     updateTaskProgress: <CheckCircle size={14} />,
     createArtifact: <FileText size={14} />,
-    reportFileChanged: <FileText size={14} />,
-    createPlan: <ClipboardList size={14} />,
-    updatePlanStep: <ListChecks size={14} />,
+    reportFileChanged: <Flag size={14} />,
+    replaceFileContent: <Replace size={14} />,
+    multiReplaceFileContent: <Layers size={14} />,
+    startTerminalCommand: <PlayCircle size={14} />,
+    getCommandStatus: <Activity size={14} />,
+    sendCommandInput: <Send size={14} />,
+    taskBoundary: <Eye size={14} />,
+    notifyUser: <Bell size={14} />,
   };
   return iconMap[toolName] || <FileText size={14} />;
 }
@@ -173,52 +193,17 @@ function getToolAction(toolName: string, completed = false): string {
     updateTaskProgress: { running: 'Updating', completed: 'Updated' },
     createArtifact: { running: 'Creating', completed: 'Created' },
     reportFileChanged: { running: 'Reporting', completed: 'Reported' },
-    createPlan: { running: 'Creating plan', completed: 'Created plan' },
-    updatePlanStep: { running: 'Updating step', completed: 'Updated step' },
+    replaceFileContent: { running: 'Editing', completed: 'Edited' },
+    multiReplaceFileContent: { running: 'Editing', completed: 'Edited' },
+    startTerminalCommand: { running: 'Starting', completed: 'Started' },
+    getCommandStatus: { running: 'Checking', completed: 'Checked' },
+    sendCommandInput: { running: 'Sending', completed: 'Sent' },
+    taskBoundary: { running: 'Setting task', completed: 'Set task' },
+    notifyUser: { running: 'Notifying', completed: 'Notified' },
   };
-  
+
   const actions = actionMap[toolName] || { running: 'Running', completed: 'Ran' };
   return completed ? actions.completed : actions.running;
-}
-
-/**
- * Get file extension icon URL from VS Code CDN
- */
-function getVSCodeIcon(fileName: string): string {
-  const ext = fileName.split('.').pop()?.toLowerCase() || '';
-  const baseUrl = 'https://cdn.jsdelivr.net/gh/vscode-icons/vscode-icons@master/icons';
-
-  const iconMap: Record<string, string> = {
-    ts: 'file_type_typescript.svg',
-    tsx: 'file_type_reactts.svg',
-    js: 'file_type_js.svg',
-    jsx: 'file_type_reactjs.svg',
-    css: 'file_type_css.svg',
-    html: 'file_type_html.svg',
-    json: 'file_type_json.svg',
-    md: 'file_type_markdown.svg',
-    py: 'file_type_python.svg',
-    rs: 'file_type_rust.svg',
-    go: 'file_type_go.svg',
-    java: 'file_type_java.svg',
-    c: 'file_type_c.svg',
-    cpp: 'file_type_cpp.svg',
-    h: 'file_type_c.svg',
-    svg: 'file_type_svg.svg',
-    png: 'file_type_image.svg',
-    jpg: 'file_type_image.svg',
-    jpeg: 'file_type_image.svg',
-    gif: 'file_type_image.svg',
-    txt: 'file_type_text.svg',
-    yml: 'file_type_yaml.svg',
-    yaml: 'file_type_yaml.svg',
-    xml: 'file_type_xml.svg',
-    sh: 'file_type_shell.svg',
-    bash: 'file_type_shell.svg',
-  };
-
-  const iconFile = iconMap[ext] || 'default_file.svg';
-  return `${baseUrl}/${iconFile}`;
 }
 
 /**
@@ -228,8 +213,8 @@ function extractFileInfo(toolName: string, args: Record<string, unknown>): {
   fileName?: string;
   details?: string;
 } {
-  if (toolName === 'readFile' || toolName === 'writeFile' || toolName === 'createFile' || toolName === 'deleteFile') {
-    const filePath = (args.filePath || args.targetPath) as string;
+  if (['readFile', 'writeFile', 'createFile', 'deleteFile', 'replaceFileContent', 'multiReplaceFileContent'].includes(toolName)) {
+    const filePath = (args.filePath || args.targetPath || args.TargetFile) as string;
     if (filePath) {
       const fileName = filePath.split('/').pop() || filePath;
       return { fileName };
@@ -238,36 +223,43 @@ function extractFileInfo(toolName: string, args: Record<string, unknown>): {
 
   if (toolName === 'webSearch') {
     const query = args.query as string;
-    if (query) {
-      return { details: `"${query}"` };
-    }
+    if (query) return { details: `"${query}"` };
   }
 
   if (toolName === 'listDirectory') {
-    const dirPath = args.dirPath as string;
+    const dirPath = (args.dirPath || args.DirectoryPath) as string;
     return { details: dirPath || '.' };
   }
 
   if (toolName === 'searchInFiles' || toolName === 'grepSearch') {
-    const pattern = args.pattern as string;
+    const pattern = (args.pattern || args.Query) as string;
     return { details: `"${pattern}"` };
   }
 
   if (toolName === 'globSearch') {
-    const pattern = args.pattern as string;
+    const pattern = (args.pattern || args.Pattern) as string;
     return { details: pattern };
   }
 
-  if (toolName === 'runTerminalCommand') {
-    const command = args.command as string;
+  if (['runTerminalCommand', 'startTerminalCommand'].includes(toolName)) {
+    const command = (args.command || args.CommandLine) as string;
     if (command) {
       const shortCmd = command.length > 40 ? command.slice(0, 40) + '...' : command;
       return { details: `$ ${shortCmd}` };
     }
   }
 
+  if (toolName === 'getCommandStatus') {
+    const cmdId = (args.commandId || args.CommandId) as string;
+    if (cmdId) return { details: cmdId.slice(0, 12) };
+  }
+
+  if (toolName === 'sendCommandInput') {
+    return { details: args.Terminate ? 'Terminate' : 'stdin' };
+  }
+
   if (toolName === 'fetchUrl') {
-    const url = args.url as string;
+    const url = (args.url || args.Url) as string;
     if (url) {
       try {
         const parsed = new URL(url);
@@ -280,29 +272,16 @@ function extractFileInfo(toolName: string, args: Record<string, unknown>): {
 
   if (toolName === 'updateTaskProgress') {
     const title = args.title as string;
-    if (title) {
-      return { details: `Task: ${title}` };
-    }
-    return { details: 'Task progress' };
+    return { details: title || 'Task progress' };
   }
 
   if (toolName === 'createArtifact') {
     const artifactName = args.name as string;
     const filePath = args.filename as string;
     const fileName = filePath ? filePath.split('/').pop() || filePath : undefined;
-
-    if (artifactName && fileName) {
-      return { fileName, details: artifactName };
-    }
-
-    if (artifactName) {
-      return { details: artifactName };
-    }
-
-    if (fileName) {
-      return { fileName };
-    }
-
+    if (artifactName && fileName) return { fileName, details: artifactName };
+    if (artifactName) return { details: artifactName };
+    if (fileName) return { fileName };
     return { details: 'Artifact' };
   }
 
@@ -310,29 +289,23 @@ function extractFileInfo(toolName: string, args: Record<string, unknown>): {
     const filePath = (args.filePath || args.targetPath) as string;
     const status = args.status as string;
     const fileName = filePath ? filePath.split('/').pop() || filePath : undefined;
-
-    if (fileName && status) {
-      return { fileName, details: status };
-    }
-
-    if (fileName) {
-      return { fileName };
-    }
-
-    if (status) {
-      return { details: status };
-    }
+    if (fileName && status) return { fileName, details: status };
+    if (fileName) return { fileName };
+    if (status) return { details: status };
   }
 
-  if (toolName === 'createPlan') {
-    const title = args.title as string;
-    return { details: title || 'Implementation plan' };
+  if (toolName === 'taskBoundary') {
+    const taskName = args.TaskName as string;
+    const mode = args.Mode as string;
+    if (taskName && mode) return { details: `${mode}: ${taskName}` };
+    if (taskName) return { details: taskName };
+    return { details: 'Task boundary' };
   }
 
-  if (toolName === 'updatePlanStep') {
-    const stepId = args.stepId as string;
-    const status = args.status as string;
-    return { details: `${stepId}: ${status}` };
+  if (toolName === 'notifyUser') {
+    const msg = args.Message as string;
+    if (msg) return { details: msg.slice(0, 40) + (msg.length > 40 ? '...' : '') };
+    return { details: 'User notification' };
   }
 
   return {};
@@ -358,14 +331,7 @@ const InlineToolChip: React.FC<{ part: LivePart }> = ({ part }) => {
       <span className="tool-chip-action">{action}</span>
 
       {fileName && (
-        <>
-          <img
-            src={getVSCodeIcon(fileName)}
-            alt=""
-            className="file-type-icon"
-          />
-          <span className="tool-chip-file">{fileName}</span>
-        </>
+        <span className="tool-chip-file">{fileName}</span>
       )}
 
       {details && <span className="tool-chip-details">{details}</span>}
@@ -381,11 +347,62 @@ const InlineToolChip: React.FC<{ part: LivePart }> = ({ part }) => {
   );
 };
 
+/**
+ * Thinking/reasoning dropdown component
+ */
+const ThinkingBlock: React.FC<{ content: string; isLive?: boolean }> = ({ content, isLive }) => {
+  const [isExpanded, setIsExpanded] = useState(!!isLive);
+
+  // Auto-expand when live thinking starts
+  useEffect(() => {
+    if (isLive) setIsExpanded(true);
+  }, [isLive]);
+
+  // Auto-collapse when thinking ends (isLive goes false)
+  useEffect(() => {
+    if (!isLive && content) {
+      const timer = setTimeout(() => setIsExpanded(false), 800);
+      return () => clearTimeout(timer);
+    }
+  }, [isLive, content]);
+
+  if (!content) return null;
+
+  return (
+    <div className={`thinking-block ${isExpanded ? 'expanded' : 'collapsed'} ${isLive ? 'live' : ''}`}>
+      <button className="thinking-toggle" onClick={() => setIsExpanded(!isExpanded)}>
+        <Brain size={14} className={isLive ? 'thinking-brain spinning' : 'thinking-brain'} />
+        <span className="thinking-label">{isLive ? 'Thinking…' : 'Thought process'}</span>
+        {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+      </button>
+      {isExpanded && (
+        <div className="thinking-content">
+          <MarkdownRenderer content={content} className="thinking-text-content" />
+        </div>
+      )}
+    </div>
+  );
+};
+
 function buildTimelineGroups(parts: LivePart[], keyPrefix: string): TimelineGroup[] {
   const groups: TimelineGroup[] = [];
   let pendingWhitespace = '';
 
   for (const part of parts) {
+    if (part.type === 'thinking' && part.content) {
+      const last = groups[groups.length - 1];
+      if (last?.kind === 'thinking') {
+        last.text += part.content;
+      } else {
+        groups.push({
+          kind: 'thinking',
+          key: `${keyPrefix}-thinking-${part.id}`,
+          text: part.content,
+        });
+      }
+      continue;
+    }
+
     if (part.type === 'text' && part.content) {
       const chunk = part.content;
       const last = groups[groups.length - 1];
@@ -409,7 +426,6 @@ function buildTimelineGroups(parts: LivePart[], keyPrefix: string): TimelineGrou
     }
 
     if (part.type === 'tool-call' && part.toolCall) {
-      // Discard isolated whitespace if a tool block follows.
       pendingWhitespace = '';
       const last = groups[groups.length - 1];
       if (last?.kind === 'tools') {
@@ -427,12 +443,23 @@ function buildTimelineGroups(parts: LivePart[], keyPrefix: string): TimelineGrou
   return groups;
 }
 
-const PartsTimeline: React.FC<{ parts: LivePart[]; keyPrefix: string }> = ({ parts, keyPrefix }) => {
+const PartsTimeline: React.FC<{ parts: LivePart[]; keyPrefix: string; isLive?: boolean }> = ({ parts, keyPrefix, isLive }) => {
   const groups = buildTimelineGroups(parts, keyPrefix);
+  const isThinking = useChatStore(state => state.isThinking);
 
   return (
     <>
       {groups.map((group) => {
+        if (group.kind === 'thinking') {
+          return (
+            <ThinkingBlock
+              key={group.key}
+              content={group.text}
+              isLive={isLive && isThinking}
+            />
+          );
+        }
+
         if (group.kind === 'tools') {
           return (
             <div key={group.key} className="message-part-group tool-chips-inline">
@@ -461,12 +488,13 @@ const PartsTimeline: React.FC<{ parts: LivePart[]; keyPrefix: string }> = ({ par
 };
 
 /**
- * Live streaming content component  
- * Renders parts in chronological order (text + tools interleaved)
+ * Live streaming content component
+ * Renders parts in chronological order (thinking → text → tools interleaved)
  */
 const LiveStreamContent: React.FC = () => {
   const liveParts = useChatStore((state) => state.liveParts);
   const isStreaming = useChatStore((state) => state.isStreaming);
+  const isThinking = useChatStore((state) => state.isThinking);
 
   if (!isStreaming) return null;
 
@@ -486,7 +514,11 @@ const LiveStreamContent: React.FC = () => {
   return (
     <div className="message-row assistant">
       <div className="message-bubble">
-        <PartsTimeline parts={liveParts} keyPrefix="live" />
+        <PartsTimeline parts={liveParts} keyPrefix="live" isLive={true} />
+        {/* Show cursor when actively streaming text (not just thinking) */}
+        {isStreaming && !isThinking && liveParts.some(p => p.type === 'text') && (
+          <span className="streaming-cursor" />
+        )}
       </div>
     </div>
   );
@@ -505,7 +537,7 @@ export const ChatPanel: React.FC = () => {
   const threadMessagesRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
 
-  // Track whether user is near the bottom; if not, don't yank scroll while reading.
+  // Track whether user is near the bottom
   useEffect(() => {
     const container = threadMessagesRef.current;
     if (!container) return;
@@ -520,7 +552,7 @@ export const ChatPanel: React.FC = () => {
     return () => container.removeEventListener('scroll', onScroll);
   }, []);
 
-  // Auto-scroll on new content, but avoid smooth animation during token streaming.
+  // Auto-scroll on new content
   useEffect(() => {
     const container = threadMessagesRef.current;
     if (!container || !shouldAutoScrollRef.current) return;
@@ -582,6 +614,9 @@ export const ChatPanel: React.FC = () => {
                         <PartsTimeline parts={msg.parts} keyPrefix={`msg-${msg.id}`} />
                       ) : (
                         <>
+                          {msg.thinking && (
+                            <ThinkingBlock content={msg.thinking} />
+                          )}
                           {msg.toolCalls && msg.toolCalls.length > 0 && (
                             <div className="tool-chips-inline">
                               {msg.toolCalls.map((tc) => (

@@ -1,17 +1,18 @@
 /**
- * Tool Loop
+ * Tool Loop — Production-Grade ReAct Orchestrator
  *
- * Implements the ReAct-style (Reason + Act) tool execution loop.
- * Streams LLM responses, collects tool calls, executes them, then
- * feeds results back until the LLM stops requesting tools.
+ * Implements a ReAct-style (Reason + Act) tool execution loop with:
+ * - In-loop context compaction (prevents context window overflow)
+ * - Fuzzy duplicate detection (catches near-identical tool call loops)
+ * - Stall breaker (detects read→edit→fail cycles and injects corrective hints)
+ * - Tool result truncation (prevents single tool output from bloating context)
  *
- * Key invariants (matching OpenAI message ordering rules):
+ * Key invariants (OpenAI message ordering rules):
  *  1. Assistant message is started BEFORE streaming begins.
  *  2. Tool-call deltas are captured into history AS THEY STREAM.
  *  3. After stream ends, tool calls are finalized (status: generating → generated).
  *  4. If no tool calls: break — conversation complete.
  *  5. If tool calls exist: execute them, add tool-result messages, loop again.
- *  6. The next LLM call sees: […previous messages, assistant(with tool_calls), tool(result), …]
  */
 
 import type {
@@ -25,7 +26,28 @@ import type { LLMClient } from '../core/llm';
 import type { ChatHistory } from '../core/history';
 import type { ToolRegistry } from '../tools/registry';
 import type { AgentSession } from './session';
+import type { ContextManager } from './context';
 import { evaluateToolPolicy } from '../tools/policies';
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/** Max characters for a single tool result before truncation */
+const MAX_TOOL_RESULT_CHARS = 4000;
+
+/** Run compaction every N iterations */
+const COMPACTION_INTERVAL = 5;
+
+/** Number of consecutive similar tool calls before triggering stall detection */
+const FUZZY_DUPLICATE_THRESHOLD = 3;
+
+/** Max times a file can be the target of failed edits before stall breaker fires */
+const MAX_FILE_EDIT_FAILURES = 3;
+
+// ============================================================================
+// Types
+// ============================================================================
 
 export interface ToolLoopConfig {
   session: AgentSession;
@@ -33,10 +55,23 @@ export interface ToolLoopConfig {
   history: ChatHistory;
   toolRegistry: ToolRegistry;
   config: AgentConfig;
+  contextManager: ContextManager;
   onStream: (event: StreamEvent) => void;
   onAgentEvent: (event: unknown) => void;
   onToolApprovalRequired: (toolCalls: ToolCallState[]) => Promise<void>;
 }
+
+/** Tracks tool usage patterns for stall detection */
+interface ToolUsageRecord {
+  toolName: string;
+  filePath: string | null;
+  succeeded: boolean;
+  iteration: number;
+}
+
+// ============================================================================
+// Tool Loop
+// ============================================================================
 
 export class ToolLoop {
   private session: AgentSession;
@@ -44,6 +79,7 @@ export class ToolLoop {
   private history: ChatHistory;
   private tools: ToolRegistry;
   private config: AgentConfig;
+  private contextManager: ContextManager;
   private onStream: (event: StreamEvent) => void;
   private onAgentEvent: (event: unknown) => void;
   private onToolApprovalRequired: (toolCalls: ToolCallState[]) => Promise<void>;
@@ -54,6 +90,7 @@ export class ToolLoop {
     this.history = config.history;
     this.tools = config.toolRegistry;
     this.config = config.config;
+    this.contextManager = config.contextManager;
     this.onStream = config.onStream;
     this.onAgentEvent = config.onAgentEvent;
     this.onToolApprovalRequired = config.onToolApprovalRequired;
@@ -64,24 +101,35 @@ export class ToolLoop {
    * or we hit the iteration cap.
    */
   async run(signal: AbortSignal): Promise<void> {
-    console.log('[ToolLoop] run() started');
     let iterations = 0;
     const maxIterations = this.config.maxToolIterations;
 
-    // Duplicate-call detection: track last N tool signatures to detect infinite loops.
-    // A "signature" is toolName + JSON-sorted-args. If the same signature appears
-    // MAX_DUPLICATE_THRESHOLD times in a row, the LLM is stuck → bail out.
-    const MAX_DUPLICATE_THRESHOLD = 3;
+    // ---- Stall Detection State ----
+    // Exact-match duplicate detection (legacy — kept as first line of defence)
     const recentSignatures: string[] = [];
+    const EXACT_DUP_THRESHOLD = 3;
+
+    // Fuzzy pattern tracking: records every tool call with its file target + result
+    const toolUsageLog: ToolUsageRecord[] = [];
 
     while (iterations < maxIterations) {
-      if (signal.aborted) {
-        console.log('[ToolLoop] Aborted by signal');
-        break;
-      }
+      if (signal.aborted) break;
 
       iterations++;
-      console.log(`[ToolLoop] === Iteration ${iterations}/${maxIterations} ===`);
+
+      // -----------------------------------------------------------------------
+      // 0. In-loop compaction — prevent context overflow mid-session
+      // -----------------------------------------------------------------------
+      if (iterations > 1 && iterations % COMPACTION_INTERVAL === 0) {
+        const compacted = await this.contextManager.checkAndCompact();
+        if (compacted) {
+          const stats = this.contextManager.getContextStats();
+          console.log(
+            `[ToolLoop] Context compacted at iteration ${iterations}. ` +
+            `${stats.messageCount} msgs, ~${stats.currentTokens} tokens (${stats.usagePercent.toFixed(0)}%)`
+          );
+        }
+      }
 
       // -----------------------------------------------------------------------
       // 1. Build the message list for this LLM call
@@ -89,29 +137,20 @@ export class ToolLoop {
       const messages = this.history.toMessages();
       const toolDefinitions = this.tools.getDefinitions();
 
-      console.log(`[ToolLoop] Messages count: ${messages.length}`);
       console.log(
-        '[ToolLoop] Message roles:',
-        messages.map((m) => m.role)
+        `[ToolLoop] === Iteration ${iterations}/${maxIterations} === ` +
+        `(${messages.length} msgs, ${toolDefinitions.length} tools)`
       );
-      console.log(`[ToolLoop] Tool definitions count: ${toolDefinitions.length}`);
 
       // -----------------------------------------------------------------------
       // 2. Start a fresh assistant message BEFORE streaming so deltas land in it
       // -----------------------------------------------------------------------
-      console.log('[ToolLoop] Starting assistant message in history...');
       this.history.startAssistantMessage();
 
       try {
         // -----------------------------------------------------------------------
         // 3. Stream LLM response
-        //    - text_delta   → append to assistant content
-        //    - tool_call_start / tool_call_delta → call handleToolCallDelta
-        //      (BOTH carry delta data; start has id+name, delta has argument chunks)
-        //    - tool_call_complete → finalization is done via finalizeToolCalls()
-        //    - stream_end → loop exits naturally
         // -----------------------------------------------------------------------
-        console.log('[ToolLoop] Calling llm.streamChat()...');
         for await (const event of this.llm.streamChat(
           messages,
           { tools: toolDefinitions },
@@ -129,9 +168,6 @@ export class ToolLoop {
               }
               break;
 
-            // CRITICAL FIX: Both start and delta events carry ToolCallDelta.
-            // Start carries { id, function.name, function.arguments (partial) }.
-            // Delta carries { function.arguments (next chunk) }.
             case 'tool_call_start':
             case 'tool_call_delta':
               if (event.data.toolCallDelta) {
@@ -139,10 +175,6 @@ export class ToolLoop {
               }
               break;
 
-            // tool_call_complete is emitted by our LLM client after the finish
-            // chunk; it carries the FULLY assembled args from toolCallsInProgress
-            // (the LLM client's own accumulator) — use it to overwrite history
-            // so any streaming chunk boundary issues can't corrupt the final args.
             case 'tool_call_complete':
               if (event.data.toolCall?.id && event.data.toolCall.function?.arguments !== undefined) {
                 this.history.overrideToolCallArguments(
@@ -164,37 +196,26 @@ export class ToolLoop {
         }
 
         // -----------------------------------------------------------------------
-        // 4. Finalize: change status of streaming tool calls from
-        //    'generating' → 'generated' and parse their JSON arguments.
+        // 4. Finalize: change status generating → generated, parse JSON args
         // -----------------------------------------------------------------------
         this.history.finalizeToolCalls();
-
-        console.log('[ToolLoop] Stream complete, checking for tool calls...');
 
         // -----------------------------------------------------------------------
         // 5. Did the LLM request any tools?
         // -----------------------------------------------------------------------
         const lastItem = this.history.getLast();
-
-        // If the last item has no tool call states, or they're all empty,
-        // the LLM returned a plain text response → we are done.
         const pendingToolCalls =
           lastItem?.toolCallStates?.filter((tc) => tc.status === 'generated') ?? [];
 
         if (pendingToolCalls.length === 0) {
           console.log('[ToolLoop] No tool calls — conversation complete');
-
-          // Safety: if the last assistant message has empty content AND no tool
-          // calls, it means the LLM sent a pure stop for some reason.  Keep it
-          // in history anyway so the conversation record is complete.
           break;
         }
 
-        console.log(`[ToolLoop] Found ${pendingToolCalls.length} tool call(s) to execute`);
+        console.log(`[ToolLoop] ${pendingToolCalls.length} tool call(s) to execute`);
 
         // -----------------------------------------------------------------------
-        // Duplicate-call guard: detect when the LLM is stuck in a loop calling
-        // the same tool with the same args repeatedly.
+        // 6. Exact-match duplicate guard (first line of defence)
         // -----------------------------------------------------------------------
         const iterationSignature = pendingToolCalls
           .map((tc) => `${tc.toolCall.function.name}:${tc.toolCall.function.arguments}`)
@@ -202,30 +223,28 @@ export class ToolLoop {
           .join('|');
 
         recentSignatures.push(iterationSignature);
-        if (recentSignatures.length > MAX_DUPLICATE_THRESHOLD) {
+        if (recentSignatures.length > EXACT_DUP_THRESHOLD) {
           recentSignatures.shift();
         }
 
-        const allSame = recentSignatures.length === MAX_DUPLICATE_THRESHOLD &&
-          recentSignatures.every(s => s === iterationSignature);
+        const allExactSame =
+          recentSignatures.length === EXACT_DUP_THRESHOLD &&
+          recentSignatures.every((s) => s === iterationSignature);
 
-        if (allSame) {
+        if (allExactSame) {
           console.warn(
-            `[ToolLoop] Duplicate tool call detected ${MAX_DUPLICATE_THRESHOLD}x in a row: ${iterationSignature.slice(0, 120)}. Breaking loop.`
+            `[ToolLoop] EXACT duplicate detected ${EXACT_DUP_THRESHOLD}x: ${iterationSignature.slice(0, 80)}`
           );
-          // Add a tool error message so the LLM knows it's stuck
-          for (const tc of pendingToolCalls) {
-            this.history.addToolResult(
-              tc.toolCallId,
-              'Error: This tool call was repeated with identical arguments. Please try a different approach.',
-              'errored'
-            );
-          }
+          this.injectStallHint(
+            pendingToolCalls,
+            'You are repeating the exact same tool call with identical arguments. ' +
+            'This approach is not working. Try a completely different strategy.'
+          );
           break;
         }
 
         // -----------------------------------------------------------------------
-        // 6. Policy check: split into auto-approved vs needs-human-approval
+        // 7. Policy check: split into auto-approved vs needs-human-approval
         // -----------------------------------------------------------------------
         const toolsNeedingApproval: ToolCallState[] = [];
         const toolsAutoApproved: ToolCallState[] = [];
@@ -244,28 +263,20 @@ export class ToolLoop {
           } else if (policyResult.policy === 'allowedWithPermission') {
             toolsNeedingApproval.push(tc);
           } else {
-            // disabled
             tc.status = 'errored';
             tc.error = 'Tool is disabled by policy';
           }
         }
 
-        console.log(
-          `[ToolLoop] Auto-approved: ${toolsAutoApproved.length}, Need approval: ${toolsNeedingApproval.length}`
-        );
-
         // -----------------------------------------------------------------------
-        // 7. Ask for human approval if required
+        // 8. Ask for human approval if required
         // -----------------------------------------------------------------------
         if (toolsNeedingApproval.length > 0) {
-          console.log('[ToolLoop] Requesting approval for tools...');
           await this.onToolApprovalRequired(toolsNeedingApproval);
-          // After this resolves, their status is 'generated' (approved) or
-          // 'canceled' (rejected) — set by AgentSession.approveToolCalls().
         }
 
         // -----------------------------------------------------------------------
-        // 8. Execute all approved tool calls
+        // 9. Execute all approved tool calls (with result truncation)
         // -----------------------------------------------------------------------
         const toExecute = [
           ...toolsAutoApproved,
@@ -273,24 +284,48 @@ export class ToolLoop {
         ];
 
         for (const tc of toExecute) {
-          await this.executeToolCall(tc, signal);
+          const succeeded = await this.executeToolCall(tc, signal);
+
+          // Record in fuzzy usage log for stall detection
+          const filePath = this.extractFilePath(tc);
+          toolUsageLog.push({
+            toolName: tc.toolCall.function.name,
+            filePath,
+            succeeded,
+            iteration: iterations,
+          });
         }
 
         // -----------------------------------------------------------------------
-        // 9. Verify all tool calls that were supposed to run are settled
+        // 10. Fuzzy stall detection (the main circuit breaker)
+        // -----------------------------------------------------------------------
+        const stallResult = this.detectStall(toolUsageLog, iterations);
+        if (stallResult.stalled) {
+          console.warn(`[ToolLoop] STALL DETECTED: ${stallResult.reason}`);
+
+          // Instead of silently breaking, inject a corrective hint into the
+          // conversation so the model can self-correct
+          this.history.addUserMessage(
+            `[System] The orchestrator detected a stall pattern: ${stallResult.reason}\n\n` +
+            `${stallResult.hint}\n\n` +
+            'Please acknowledge this and take a different approach.'
+          );
+
+          // Don't break — give the model ONE more chance with the hint.
+          // The exact-match guard or the next stall check will catch it if it persists.
+          console.log('[ToolLoop] Injected corrective hint — giving model one more iteration');
+        }
+
+        // -----------------------------------------------------------------------
+        // 11. Verify all tool calls settled
         // -----------------------------------------------------------------------
         if (!this.history.areAllToolCallsComplete()) {
           console.log('[ToolLoop] Some tool calls not settled — stopping loop');
           break;
         }
 
-        // Loop continues: next iteration sends tool results to LLM.
-        console.log('[ToolLoop] All tool calls complete — continuing loop for LLM follow-up');
-
       } catch (error) {
-        console.error('[ToolLoop] Error in iteration:', error);
-        // Remove the dangling empty assistant message from history before
-        // re-throwing so the conversation state stays consistent.
+        console.error('[ToolLoop] Error:', error instanceof Error ? error.message : error);
         this.history.removeLastIfEmptyAssistant();
         throw error;
       }
@@ -298,17 +333,27 @@ export class ToolLoop {
 
     if (iterations >= maxIterations) {
       console.warn(`[ToolLoop] Reached maximum iterations (${maxIterations})`);
+
+      // Add a system message so the model knows it was cut off
+      this.history.addUserMessage(
+        '[System] The tool loop reached its maximum iteration limit. ' +
+        'Please summarize what has been accomplished so far and what remains to be done.'
+      );
     }
 
-    console.log('[ToolLoop] Tool loop complete');
+    console.log(`[ToolLoop] Complete after ${iterations} iteration(s)`);
   }
 
+  // ============================================================================
+  // Tool Execution (with result truncation)
+  // ============================================================================
+
   /**
-   * Execute a single tool call and write the result into history.
+   * Execute a single tool call, truncate its result, and write into history.
+   * Returns true if succeeded, false if failed.
    */
-  private async executeToolCall(tc: ToolCallState, signal: AbortSignal): Promise<void> {
+  private async executeToolCall(tc: ToolCallState, signal: AbortSignal): Promise<boolean> {
     const toolName = tc.toolCall.function.name;
-    console.log(`[ToolLoop] Executing tool: ${toolName}`);
 
     // Mark as in-flight
     this.history.updateToolCallStatus(tc.toolCallId, 'calling');
@@ -317,9 +362,7 @@ export class ToolLoop {
     this.onStream({
       type: 'tool_call_start',
       sessionId: this.session.sessionId,
-      data: {
-        toolCall: tc.toolCall,
-      },
+      data: { toolCall: tc.toolCall },
     });
 
     try {
@@ -328,14 +371,16 @@ export class ToolLoop {
         this.session.getToolContext()
       );
 
-      console.log(
-        `[ToolLoop] Tool ${toolName} ${result.success ? 'succeeded' : 'failed'}`
-      );
+      // Flatten context items to a single string
+      let outputContent = result.output.map((item) => item.content).join('\n\n');
 
-      // Flatten context items to a single string for the tool message
-      const outputContent = result.output.map((item) => item.content).join('\n\n');
+      // ---- TRUNCATION: prevent single tool result from bloating context ----
+      if (outputContent.length > MAX_TOOL_RESULT_CHARS) {
+        const truncated = outputContent.slice(0, MAX_TOOL_RESULT_CHARS);
+        outputContent = truncated + `\n\n[Output truncated — showing first ${MAX_TOOL_RESULT_CHARS} of ${outputContent.length} chars]`;
+      }
 
-      // Add the tool result message — this is what the LLM sees next iteration
+      // Add the tool result message
       this.history.addToolResult(
         tc.toolCallId,
         outputContent || (result.success ? '(done)' : `Error: ${result.error}`),
@@ -350,26 +395,174 @@ export class ToolLoop {
       this.onStream({
         type: 'tool_result',
         sessionId: this.session.sessionId,
-        data: {
-          toolCallState: this.history.getToolCallState(tc.toolCallId),
-        },
+        data: { toolCallState: this.history.getToolCallState(tc.toolCallId) },
       });
+
+      const succeeded = result.success !== false;
+      console.log(`[ToolLoop] ${toolName} ${succeeded ? '✓' : '✗'}`);
+      return succeeded;
 
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      console.error(`[ToolLoop] Tool ${toolName} threw:`, errorMsg);
+      console.error(`[ToolLoop] ${toolName} threw: ${errorMsg}`);
 
       this.history.addToolResult(tc.toolCallId, `Error: ${errorMsg}`, 'errored');
       this.history.updateToolCallStatus(tc.toolCallId, 'errored', undefined, errorMsg);
 
-      // Emit error result to renderer
       this.onStream({
         type: 'tool_result',
         sessionId: this.session.sessionId,
-        data: {
-          toolCallState: this.history.getToolCallState(tc.toolCallId),
-        },
+        data: { toolCallState: this.history.getToolCallState(tc.toolCallId) },
       });
+
+      return false;
+    }
+  }
+
+  // ============================================================================
+  // Stall Detection
+  // ============================================================================
+
+  /**
+   * Fuzzy stall detection — catches patterns like:
+   * - Same file read 3+ times in recent iterations
+   * - Same file edited and failed 3+ times
+   * - readFile→replaceFileContent→fail cycle on same target
+   */
+  private detectStall(
+    log: ToolUsageRecord[],
+    currentIteration: number
+  ): { stalled: boolean; reason: string; hint: string } {
+    // Only look at the last 8 iterations
+    const window = 8;
+    const recent = log.filter((r) => r.iteration > currentIteration - window);
+
+    if (recent.length < 4) {
+      return { stalled: false, reason: '', hint: '' };
+    }
+
+    // ---- Pattern 1: Same file edited and failed N+ times ----
+    const editTools = new Set(['replaceFileContent', 'multiReplaceFileContent', 'writeFile']);
+    const editFailures = new Map<string, number>();
+
+    for (const record of recent) {
+      if (editTools.has(record.toolName) && !record.succeeded && record.filePath) {
+        const key = record.filePath;
+        editFailures.set(key, (editFailures.get(key) || 0) + 1);
+      }
+    }
+
+    for (const [filePath, count] of editFailures) {
+      if (count >= MAX_FILE_EDIT_FAILURES) {
+        return {
+          stalled: true,
+          reason: `replaceFileContent failed ${count} times on ${filePath}`,
+          hint:
+            `The replaceFileContent tool has failed ${count} times on "${filePath}". ` +
+            'The targetContent string is probably not matching the actual file contents. ' +
+            'You should: (1) Use readFile to see the EXACT current content of the file, ' +
+            'then (2) Copy the exact text you want to replace, character-for-character, ' +
+            'OR (3) Use writeFile to completely rewrite the file if the edits are extensive.',
+        };
+      }
+    }
+
+    // ---- Pattern 2: Same file read 4+ times without successful edit ----
+    const readCounts = new Map<string, number>();
+    const editSuccesses = new Set<string>();
+
+    for (const record of recent) {
+      if (record.toolName === 'readFile' && record.filePath) {
+        readCounts.set(record.filePath, (readCounts.get(record.filePath) || 0) + 1);
+      }
+      if (editTools.has(record.toolName) && record.succeeded && record.filePath) {
+        editSuccesses.add(record.filePath);
+      }
+    }
+
+    for (const [filePath, count] of readCounts) {
+      if (count >= 4 && !editSuccesses.has(filePath)) {
+        return {
+          stalled: true,
+          reason: `readFile called ${count} times on ${filePath} without successful edit`,
+          hint:
+            `You have read "${filePath}" ${count} times without making a successful edit. ` +
+            'Stop re-reading the file and either: (1) Use writeFile to rewrite the entire file, ' +
+            'or (2) Move on to a different approach entirely. ' +
+            'Reading the same file repeatedly will not change its contents.',
+        };
+      }
+    }
+
+    // ---- Pattern 3: Same searchInFiles pattern repeated 3+ times ----
+    const searchPatterns = new Map<string, number>();
+    for (const record of recent) {
+      if (record.toolName === 'searchInFiles' || record.toolName === 'grepSearch') {
+        // Use filePath as a proxy for the search pattern (it's stored there by extractFilePath)
+        const key = record.filePath || 'unknown';
+        searchPatterns.set(key, (searchPatterns.get(key) || 0) + 1);
+      }
+    }
+
+    for (const [pattern, count] of searchPatterns) {
+      if (count >= FUZZY_DUPLICATE_THRESHOLD) {
+        return {
+          stalled: true,
+          reason: `searchInFiles called ${count} times with similar parameters`,
+          hint:
+            'You are searching for the same thing repeatedly. ' +
+            'The search results are not changing between calls. ' +
+            'Use the results you already have, or try a different search query.',
+        };
+      }
+    }
+
+    return { stalled: false, reason: '', hint: '' };
+  }
+
+  /**
+   * Extract the primary file path from a tool call's arguments.
+   * Used for fuzzy stall detection (grouping by target file).
+   */
+  private extractFilePath(tc: ToolCallState): string | null {
+    try {
+      const argsStr = tc.toolCall.function.arguments;
+      const args = typeof argsStr === 'string' ? JSON.parse(argsStr) : argsStr;
+
+      // File operations
+      if (args.filePath) return String(args.filePath);
+      if (args.targetPath) return String(args.targetPath);
+      if (args.TargetFile) return String(args.TargetFile);
+
+      // Directory operations
+      if (args.dirPath) return String(args.dirPath);
+      if (args.DirectoryPath) return String(args.DirectoryPath);
+
+      // Search operations — use pattern as pseudo-path for dedup
+      if (args.pattern) return `search:${args.pattern}`;
+      if (args.Query) return `search:${args.Query}`;
+
+      // Terminal operations
+      if (args.command) return `cmd:${String(args.command).slice(0, 60)}`;
+      if (args.CommandLine) return `cmd:${String(args.CommandLine).slice(0, 60)}`;
+
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Inject an error result into history for each pending tool call,
+   * telling the model to change strategy.
+   */
+  private injectStallHint(pendingToolCalls: ToolCallState[], message: string): void {
+    for (const tc of pendingToolCalls) {
+      this.history.addToolResult(
+        tc.toolCallId,
+        `Error: ${message}`,
+        'errored'
+      );
     }
   }
 }

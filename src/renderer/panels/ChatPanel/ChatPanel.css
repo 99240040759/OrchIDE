@@ -411,9 +411,91 @@
 }
 
 /* ============================================
-   THINKING INDICATOR
+   THINKING BLOCK
    ============================================ */
-/* Shining "Thinking..." text indicator */
+.thinking-block {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  overflow: hidden;
+  transition: border-color 0.3s ease;
+}
+
+.thinking-block.live {
+  border-color: rgba(168, 130, 255, 0.3);
+}
+
+.thinking-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+  font-weight: 500;
+}
+
+.thinking-toggle:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-color);
+}
+
+.thinking-brain {
+  color: #a882ff;
+}
+
+.thinking-brain.spinning {
+  animation: pulse-brain 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-brain {
+  0%, 100% { opacity: 0.5; transform: scale(0.95); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+
+.thinking-label {
+  flex: 1;
+  text-align: left;
+  color: inherit;
+}
+
+.thinking-content {
+  padding: 8px 12px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  max-height: 300px;
+  overflow-y: auto;
+  animation: thinking-expand 0.2s ease-out;
+}
+
+.thinking-text-content {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+@keyframes thinking-expand {
+  from { max-height: 0; opacity: 0; }
+  to { max-height: 300px; opacity: 1; }
+}
+
+.thinking-content::-webkit-scrollbar {
+  width: 4px;
+}
+
+.thinking-content::-webkit-scrollbar-thumb {
+  background: var(--hover-bg);
+  border-radius: 4px;
+}
+
+/* Shining "Thinking..." text indicator (before any content) */
 .thinking-container {
   display: flex;
   align-items: center;
@@ -428,11 +510,25 @@
 }
 
 @keyframes thinking-shine {
-  0%, 100% {
-    opacity: 0.5;
-  }
-  50% {
-    opacity: 1;
-  }
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+/* ============================================
+   STREAMING CURSOR
+   ============================================ */
+.streaming-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 16px;
+  background: var(--accent-color);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: cursor-blink 0.8s step-end infinite;
+}
+
+@keyframes cursor-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
 }
 

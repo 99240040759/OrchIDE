@@ -173,7 +173,9 @@ export interface SessionTitledData {
 
 export type StreamEventType =
   | 'text-delta'
+  | 'reasoning-delta'
   | 'tool-call-start'
+  | 'tool-call-delta'
   | 'tool-call-args'
   | 'tool-result'
   | 'thinking'

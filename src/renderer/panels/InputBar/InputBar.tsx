@@ -86,7 +86,7 @@ export const InputBar: React.FC = () => {
   };
 
   return (
-    <div className="input-container" onClick={() => textareaRef.current?.focus()}>
+    <div className={`input-container${isStreaming ? ' generating' : ''}`} onClick={() => textareaRef.current?.focus()}>
       <textarea
         ref={textareaRef}
         value={value}

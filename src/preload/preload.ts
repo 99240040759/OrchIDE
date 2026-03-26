@@ -197,6 +197,21 @@ contextBridge.exposeInMainWorld('orchide', {
       onArtifactCreated?: (data: { sessionId: string; artifact: unknown }) => void;
       onFileChanged?: (data: { sessionId: string; change: unknown }) => void;
       onSessionTitled?: (data: { sessionId: string; title: string }) => void;
+      onTaskBoundary?: (data: {
+        sessionId: string;
+        taskName: string;
+        mode: string;
+        taskStatus: string;
+        taskSummary: string;
+        predictedTaskSize?: number;
+      }) => void;
+      onNotifyUser?: (data: {
+        sessionId: string;
+        message: string;
+        pathsToReview?: string[];
+        blockedOnUser: boolean;
+        shouldAutoProceed?: boolean;
+      }) => void;
     }): (() => void) => {
       const unsubscribers: Array<() => void> = [];
 
@@ -227,12 +242,22 @@ contextBridge.exposeInMainWorld('orchide', {
       if (handlers.onSessionTitled) {
         unsubscribers.push(addListener('agent:session-titled', handlers.onSessionTitled as EventCallback));
       }
+      if (handlers.onTaskBoundary) {
+        unsubscribers.push(addListener('agent:task-boundary', handlers.onTaskBoundary as EventCallback));
+      }
+      if (handlers.onNotifyUser) {
+        unsubscribers.push(addListener('agent:notify-user', handlers.onNotifyUser as EventCallback));
+      }
 
       // Return combined cleanup function
       return () => {
         unsubscribers.forEach(unsub => unsub());
       };
     },
+
+    // Resume from notifyUser block
+    resumeNotify: (sessionId: string) =>
+      ipcRenderer.invoke('agent:resume-notify', sessionId),
 
     // Legacy individual subscription methods (deprecated but kept for compatibility)
     onStreamStart: (cb: (data: { sessionId: string }) => void) =>
@@ -277,6 +302,8 @@ contextBridge.exposeInMainWorld('orchide', {
         'agent:file-changed',
         'agent:session-titled',
         'agent:agent-event',
+        'agent:task-boundary',
+        'agent:notify-user',
       ];
       channels.forEach(channel => removeAllChannelListeners(channel));
     },

@@ -41,18 +41,21 @@ export const DEFAULT_TOOL_POLICIES: Record<string, ToolPolicy> = {
   writeFile: 'allowedWithPermission',
   createFile: 'allowedWithPermission',
   deleteFile: 'allowedWithPermission',
+  replaceFileContent: 'allowedWithPermission',
+  multiReplaceFileContent: 'allowedWithPermission',
   
-  // Terminal - require approval
+  // Terminal - require approval (except status polling)
   runTerminalCommand: 'allowedWithPermission',
+  startTerminalCommand: 'allowedWithPermission',
+  getCommandStatus: 'allowedWithoutPermission',
+  sendCommandInput: 'allowedWithPermission',
   
   // Agent tools - auto-approve (they only update UI state)
   updateTaskProgress: 'allowedWithoutPermission',
   createArtifact: 'allowedWithoutPermission',
   reportFileChanged: 'allowedWithoutPermission',
-  
-  // Plan tools - require approval
-  createPlan: 'allowedWithPermission',
-  updatePlanStep: 'allowedWithoutPermission',
+  taskBoundary: 'allowedWithoutPermission',
+  notifyUser: 'allowedWithoutPermission',
 };
 
 // ============================================================================
@@ -202,6 +205,8 @@ function isFilePathTool(toolName: string): boolean {
     'grepSearch',
     'globSearch',
     'searchInFiles',
+    'replaceFileContent',
+    'multiReplaceFileContent',
   ].includes(toolName);
 }
 

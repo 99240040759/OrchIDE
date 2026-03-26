@@ -1,55 +1,178 @@
 /**
- * Terminal Tool Implementation
- * 
- * Executes shell commands with proper safety measures.
+ * Terminal Tool Implementations — Async Terminal System
+ *
+ * Uses the terminalRegistry singleton for background process management.
+ * Three async tools + one legacy blocking tool.
  */
 
-import { spawn } from 'node:child_process';
 import * as path from 'node:path';
+import { execSync } from 'node:child_process';
 import type { Tool, ToolContext, ToolResult } from '../types';
+import {
+  startCommand,
+  getStatus,
+  sendInput,
+  terminateCommand,
+} from '../../orchestrator/terminalRegistry';
 
 // ============================================================================
-// Dangerous Command Patterns
+// Start Terminal Command (async)
 // ============================================================================
 
-const DANGEROUS_PATTERNS = [
-  // Destructive commands
-  /\brm\s+(-[rf]+\s+)?[\/~]/i, // rm with root or home
-  /\bsudo\b/i,
-  /\bmkfs\b/i,
-  /\bdd\s+.*of=/i,
-  /\b(:|>)\s*\/dev\//i,
-  
-  // System modification
-  /\bchmod\s+777/i,
-  /\bchown\s+.*root/i,
-  
-  // Network dangers
-  /\bcurl\b.*\|\s*(ba)?sh/i, // curl | bash
-  /\bwget\b.*\|\s*(ba)?sh/i,
-  
-  // Fork bombs and resource exhaustion
-  /:\(\)\{:\|:&\};:/,
-  /while\s+true.*do/i,
-];
+export const startTerminalCommandImpl: Tool['execute'] = async (
+  args: Record<string, unknown>,
+  context: ToolContext
+): Promise<ToolResult> => {
+  const command = args.command as string;
+  const cwdRelative = (args.cwd as string) || '.';
+  const waitMs = Math.min((args.waitMs as number) || 500, 30000);
 
-/**
- * Check if a command is potentially dangerous
- */
-function isDangerousCommand(command: string): { dangerous: boolean; reason?: string } {
-  for (const pattern of DANGEROUS_PATTERNS) {
-    if (pattern.test(command)) {
-      return {
-        dangerous: true,
-        reason: `Command matches dangerous pattern: ${pattern.source}`,
-      };
-    }
+  if (!command) {
+    return {
+      output: [{ name: 'Error', description: 'Missing command', content: 'command parameter is required.' }],
+      success: false,
+      error: 'Missing command',
+    };
   }
-  return { dangerous: false };
-}
+
+  const cwd = path.isAbsolute(cwdRelative)
+    ? cwdRelative
+    : path.join(context.workspacePath || process.cwd(), cwdRelative);
+
+  try {
+    const result = await startCommand(command, cwd, context.signal, waitMs);
+
+    return {
+      output: [{
+        name: 'Command Started',
+        description: command,
+        content: JSON.stringify({
+          commandId: result.commandId,
+          status: result.status,
+          initialOutput: result.initialOutput.slice(0, 10000) || '(no output yet)',
+        }, null, 2),
+      }],
+      success: true,
+      metadata: { commandId: result.commandId },
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return {
+      output: [{ name: 'Error', description: 'Failed to start command', content: msg }],
+      success: false,
+      error: msg,
+    };
+  }
+};
 
 // ============================================================================
-// Run Terminal Command Implementation
+// Get Command Status
+// ============================================================================
+
+export const getCommandStatusImpl: Tool['execute'] = async (
+  args: Record<string, unknown>,
+  _context: ToolContext
+): Promise<ToolResult> => {
+  const commandId = args.commandId as string;
+  const waitSeconds = Math.min((args.waitSeconds as number) || 0, 300);
+  const outputCharCount = (args.outputCharCount as number) || 5000;
+
+  if (!commandId) {
+    return {
+      output: [{ name: 'Error', description: 'Missing commandId', content: 'commandId is required.' }],
+      success: false,
+      error: 'Missing commandId',
+    };
+  }
+
+  const status = await getStatus(commandId, outputCharCount, waitSeconds);
+
+  if (!status) {
+    return {
+      output: [{ name: 'Error', description: 'Command not found', content: `No command found with ID: ${commandId}` }],
+      success: false,
+      error: 'Command not found',
+    };
+  }
+
+  return {
+    output: [{
+      name: 'Command Status',
+      description: `Status: ${status.status}`,
+      content: JSON.stringify({
+        id: status.id,
+        status: status.status,
+        exitCode: status.exitCode,
+        output: status.output || '(no output)',
+        error: status.error || undefined,
+      }, null, 2),
+    }],
+    success: true,
+    metadata: { status: status.status, exitCode: status.exitCode },
+  };
+};
+
+// ============================================================================
+// Send Command Input / Terminate
+// ============================================================================
+
+export const sendCommandInputImpl: Tool['execute'] = async (
+  args: Record<string, unknown>,
+  _context: ToolContext
+): Promise<ToolResult> => {
+  const commandId = args.commandId as string;
+  const input = args.input as string | undefined;
+  const terminate = args.terminate as boolean | undefined;
+
+  if (!commandId) {
+    return {
+      output: [{ name: 'Error', description: 'Missing commandId', content: 'commandId is required.' }],
+      success: false,
+      error: 'Missing commandId',
+    };
+  }
+
+  if (!input && !terminate) {
+    return {
+      output: [{ name: 'Error', description: 'Missing action', content: 'Specify either input or terminate=true.' }],
+      success: false,
+      error: 'No action specified',
+    };
+  }
+
+  if (terminate) {
+    const killed = terminateCommand(commandId);
+    return {
+      output: [{
+        name: 'Command Terminated',
+        description: commandId,
+        content: killed ? 'Command terminated successfully.' : 'Command not found or already finished.',
+      }],
+      success: killed,
+    };
+  }
+
+  if (input) {
+    const sent = sendInput(commandId, input);
+    return {
+      output: [{
+        name: 'Input Sent',
+        description: commandId,
+        content: sent ? `Sent ${input.length} characters to command stdin.` : 'Command not found or not running.',
+      }],
+      success: sent,
+    };
+  }
+
+  return {
+    output: [{ name: 'Error', description: 'Unreachable', content: 'No action taken.' }],
+    success: false,
+    error: 'No action',
+  };
+};
+
+// ============================================================================
+// Legacy: Run Terminal Command (blocking)
 // ============================================================================
 
 export const runTerminalCommandImpl: Tool['execute'] = async (
@@ -57,162 +180,54 @@ export const runTerminalCommandImpl: Tool['execute'] = async (
   context: ToolContext
 ): Promise<ToolResult> => {
   const command = args.command as string;
-  const cwd = args.cwd as string | undefined;
-  const timeoutMs = (args.timeoutMs as number) ?? 60000;
-  const background = (args.background as boolean) ?? false;
+  const cwdRelative = (args.cwd as string) || '.';
+  const timeoutMs = (args.timeoutMs as number) || 60000;
 
-  // Security check
-  const dangerCheck = isDangerousCommand(command);
-  if (dangerCheck.dangerous) {
+  if (!command) {
+    return {
+      output: [{ name: 'Error', description: 'Missing command', content: 'command is required.' }],
+      success: false,
+      error: 'Missing command',
+    };
+  }
+
+  const cwd = path.isAbsolute(cwdRelative)
+    ? cwdRelative
+    : path.join(context.workspacePath || process.cwd(), cwdRelative);
+
+  try {
+    const result = execSync(command, {
+      cwd,
+      timeout: timeoutMs,
+      encoding: 'utf-8',
+      maxBuffer: 10 * 1024 * 1024,
+      env: { ...process.env, PAGER: 'cat', GIT_PAGER: 'cat' },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    const output = (result || '').trim();
+
     return {
       output: [{
-        name: 'Command Blocked',
-        description: 'Potentially dangerous command',
-        content: `Refused to execute: ${dangerCheck.reason}`,
-        icon: 'warning',
+        name: 'Command Output',
+        description: command,
+        content: output.slice(0, 50000) || '(no output)',
+      }],
+      success: true,
+    };
+  } catch (error: any) {
+    const stdout = error.stdout?.toString() || '';
+    const stderr = error.stderr?.toString() || '';
+    const output = `Exit code: ${error.status ?? 'unknown'}\n\nSTDOUT:\n${stdout}\n\nSTDERR:\n${stderr}`;
+
+    return {
+      output: [{
+        name: 'Command Failed',
+        description: command,
+        content: output.slice(0, 50000),
       }],
       success: false,
-      error: dangerCheck.reason,
+      error: stderr.slice(0, 500) || error.message,
     };
   }
-
-  if (!context.workspacePath) {
-    return {
-      output: [],
-      success: false,
-      error: 'No workspace path available',
-    };
-  }
-
-  // Resolve working directory
-  let workDir = context.workspacePath;
-  if (cwd && cwd !== '.') {
-    workDir = path.isAbsolute(cwd) ? cwd : path.resolve(context.workspacePath, cwd);
-    
-    // Security: ensure workDir is within workspace
-    const normalizedWorkspace = path.resolve(context.workspacePath);
-    const normalizedWorkDir = path.resolve(workDir);
-    if (!normalizedWorkDir.startsWith(normalizedWorkspace)) {
-      return {
-        output: [{
-          name: 'Access Denied',
-          description: 'Working directory outside workspace',
-          content: `Cannot execute command in ${cwd} - outside workspace`,
-          icon: 'error',
-        }],
-        success: false,
-        error: 'Working directory outside workspace',
-      };
-    }
-  }
-
-  return new Promise((resolve) => {
-    const stdout: string[] = [];
-    const stderr: string[] = [];
-    let killed = false;
-
-    // Determine shell based on platform
-    const shell = process.platform === 'win32' ? 'cmd.exe' : '/bin/bash';
-    const shellFlag = process.platform === 'win32' ? '/c' : '-c';
-
-    const proc = spawn(shell, [shellFlag, command], {
-      cwd: workDir,
-      env: { ...process.env, FORCE_COLOR: '0' },
-      stdio: ['pipe', 'pipe', 'pipe'],
-      detached: background,
-    });
-
-    // Set up timeout
-    const timeoutHandle = setTimeout(() => {
-      killed = true;
-      proc.kill('SIGTERM');
-      setTimeout(() => {
-        if (!proc.killed) proc.kill('SIGKILL');
-      }, 5000);
-    }, timeoutMs);
-
-    // Handle abort signal
-    if (context.signal) {
-      context.signal.addEventListener('abort', () => {
-        killed = true;
-        proc.kill('SIGTERM');
-      });
-    }
-
-    proc.stdout?.on('data', (data) => {
-      stdout.push(data.toString());
-    });
-
-    proc.stderr?.on('data', (data) => {
-      stderr.push(data.toString());
-    });
-
-    proc.on('error', (error) => {
-      clearTimeout(timeoutHandle);
-      resolve({
-        output: [{
-          name: 'Command Error',
-          description: command,
-          content: `Failed to execute: ${error.message}`,
-          icon: 'error',
-        }],
-        success: false,
-        error: error.message,
-      });
-    });
-
-    proc.on('close', (code) => {
-      clearTimeout(timeoutHandle);
-
-      const stdoutStr = stdout.join('');
-      const stderrStr = stderr.join('');
-      const success = code === 0 && !killed;
-
-      // Build output content
-      let content = '';
-      if (killed) {
-        content = `Command ${context.signal?.aborted ? 'aborted' : 'timed out'}\n\n`;
-      }
-      if (stdoutStr) {
-        content += `STDOUT:\n${stdoutStr}\n`;
-      }
-      if (stderrStr) {
-        content += `STDERR:\n${stderrStr}\n`;
-      }
-      if (!content) {
-        content = success ? 'Command completed with no output' : `Command failed with exit code ${code}`;
-      }
-
-      resolve({
-        output: [{
-          name: success ? 'Command Output' : 'Command Failed',
-          description: command,
-          content: content.trim(),
-          icon: success ? undefined : 'error',
-        }],
-        success,
-        error: success ? undefined : `Exit code: ${code}`,
-        metadata: {
-          exitCode: code,
-          killed,
-          workDir,
-        },
-      });
-    });
-
-    // For background processes, return immediately
-    if (background) {
-      proc.unref();
-      clearTimeout(timeoutHandle);
-      resolve({
-        output: [{
-          name: 'Background Process Started',
-          description: command,
-          content: `Process started in background (PID: ${proc.pid})`,
-        }],
-        success: true,
-        metadata: { pid: proc.pid, background: true },
-      });
-    }
-  });
 };

@@ -313,6 +313,27 @@ export interface ToolDefinition {
 export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'blocked';
 
 // ============================================================================
+// Task Boundary Types (Antigravity-level orchestration)
+// ============================================================================
+
+export type TaskBoundaryMode = 'PLANNING' | 'EXECUTION' | 'VERIFICATION';
+
+export interface TaskBoundaryData {
+  taskName: string;
+  mode: TaskBoundaryMode;
+  taskStatus: string;
+  taskSummary: string;
+  predictedTaskSize?: number;
+}
+
+export interface NotifyUserData {
+  message: string;
+  pathsToReview?: string[];
+  blockedOnUser: boolean;
+  shouldAutoProceed?: boolean;
+}
+
+// ============================================================================
 // Agent Event Types
 // ============================================================================
 
@@ -322,7 +343,9 @@ export type AgentEventType =
   | 'file_changed'
   | 'plan_created'
   | 'plan_updated'
-  | 'plan_step_updated';
+  | 'plan_step_updated'
+  | 'task_boundary'
+  | 'notify_user';
 
 export interface AgentEvent {
   type: AgentEventType;
@@ -340,6 +363,10 @@ export interface AgentEvent {
   stepId?: string;
   output?: string;
   error?: string;
+  // Task boundary & notify user
+  taskBoundary?: TaskBoundaryData;
+  notifyUser?: NotifyUserData;
+  checklistMarkdown?: string;
 }
 
 // ============================================================================
@@ -361,6 +388,8 @@ export type StreamEventType =
   | 'plan_step_start'
   | 'plan_step_complete'
   | 'approval_required'
+  | 'task_boundary'
+  | 'notify_user'
   | 'stream_end'
   | 'error';
 
@@ -388,6 +417,12 @@ export interface StreamEventData {
   
   // Approval
   approvalRequest?: ApprovalRequest;
+  
+  // Task boundary
+  taskBoundary?: TaskBoundaryData;
+  
+  // Notify user
+  notifyUser?: NotifyUserData;
   
   // Completion
   finishReason?: 'stop' | 'tool_calls' | 'length' | 'content_filter';
@@ -492,6 +527,9 @@ export interface AgentConfig {
   apiBase: string;
   temperature: number;
   maxTokens: number;
+  
+  // Workspace
+  workspaceName?: string;
   
   // Agent behavior
   maxToolCalls: number;

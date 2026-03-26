@@ -32,6 +32,7 @@ interface ChatCompletionRequest {
   tools?: ChatCompletionTool[];
   tool_choice?: 'auto' | 'none' | 'required' | { type: 'function'; function: { name: string } };
   stream?: boolean;
+  reasoning_effort?: 'low' | 'medium' | 'high';
 }
 
 interface ChatCompletionMessage {
@@ -64,6 +65,7 @@ interface ChatCompletionChunkChoice {
   delta: {
     role?: string;
     content?: string | null;
+    reasoning_content?: string | null;
     tool_calls?: ToolCallDelta[];
   };
   finish_reason: 'stop' | 'tool_calls' | 'length' | 'content_filter' | null;
@@ -171,16 +173,8 @@ export class LLMClient {
     options: CompletionOptions = {},
     signal?: AbortSignal
   ): AsyncGenerator<StreamEvent, void, unknown> {
-    console.log('[LLMClient] streamChat called');
-    console.log('[LLMClient] Messages:', messages.length);
-    console.log('[LLMClient] Options:', options);
-    console.log('[LLMClient] API base:', this.apiBase);
-    console.log('[LLMClient] Model:', this.model);
-    console.log('[LLMClient] Has API key:', !!this.apiKey);
-    
     const apiMessages = messages.map(m => this.toAPIMessage(m));
-    console.log('[LLMClient] API messages:', apiMessages);
-    
+
     const body: ChatCompletionRequest = {
       model: options.model ?? this.model,
       messages: apiMessages,
@@ -193,25 +187,30 @@ export class LLMClient {
       stream: true,
     };
 
+    // Enable max reasoning for compatible NVIDIA NIM models
+    const targetModel = body.model.toLowerCase();
+    
+    // Most OpenAI models on NVIDIA NIM accept reasoning_effort for max thinking
+    if (targetModel.includes('openai/') || targetModel.includes('-o1') || targetModel.includes('-o3')) {
+      body.reasoning_effort = 'high';
+      // o1/o3 specific restriction
+      if (targetModel.includes('-o1') || targetModel.includes('-o3')) {
+        delete body.temperature; 
+      }
+    }
+
     if (options.tools && options.tools.length > 0) {
       body.tools = options.tools.map(t => this.toAPITool(t));
       body.tool_choice = options.toolChoice ?? 'auto';
     }
-
-    console.log('[LLMClient] Request body:', JSON.stringify(body, null, 2));
 
     let retries = 0;
     let lastError: Error | null = null;
 
     while (retries <= this.maxRetries) {
       try {
-        console.log(`[LLMClient] Attempt ${retries + 1}/${this.maxRetries + 1}`);
-        
-        // Compose a unified AbortController that fires when EITHER the external
-        // signal fires OR our internal timeout fires.
         const timeoutController = new AbortController();
         const timeout = setTimeout(() => {
-          console.warn('[LLMClient] Request timed out after', this.timeoutMs, 'ms');
           timeoutController.abort();
         }, this.timeoutMs);
 
@@ -224,8 +223,6 @@ export class LLMClient {
         timeoutController.signal.addEventListener('abort', onTimeoutAbort, { once: true });
 
         const url = `${this.apiBase}/chat/completions`;
-        console.log('[LLMClient] Making request to:', url);
-        console.log('[LLMClient] Headers: Content-Type=application/json, Authorization=Bearer ***');
 
         const response = await fetch(url, {
           method: 'POST',
@@ -237,24 +234,17 @@ export class LLMClient {
           signal: combinedController.signal,
         });
 
-        console.log('[LLMClient] Response status:', response.status);
-
         clearTimeout(timeout);
-        // Clean up abort listeners to avoid memory leaks
         signal?.removeEventListener('abort', onExternalAbort);
 
         if (!response.ok) {
           const errorBody = await response.text();
-          console.error('[LLMClient] API error response:', errorBody);
           throw new Error(`LLM API error (${response.status}): ${errorBody}`);
         }
 
         if (!response.body) {
-          console.error('[LLMClient] No response body received');
           throw new Error('No response body received');
         }
-
-        console.log('[LLMClient] Starting to read response stream...');
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -287,6 +277,15 @@ export class LLMClient {
                 const choice = chunk.choices[0];
                 
                 if (!choice) continue;
+
+                // Handle reasoning/thinking content (NVIDIA models emit this)
+                if (choice.delta.reasoning_content) {
+                  yield {
+                    type: 'reasoning_delta',
+                    sessionId: '',
+                    data: { text: choice.delta.reasoning_content },
+                  };
+                }
 
                 // Handle content streaming
                 if (choice.delta.content) {

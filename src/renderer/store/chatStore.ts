@@ -1,6 +1,6 @@
 /**
  * Chat store - manages chat messages and live streaming state
- * Handles text streaming, tool calls, tool results, and thinking in real-time
+ * Handles text streaming, thinking/reasoning, tool calls, and tool results in real-time
  */
 
 import { create } from 'zustand';
@@ -14,8 +14,9 @@ export interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  thinking?: string;
   timestamp: number;
-  toolCalls?: ToolCallEvent[]; // Store tool calls with the message
+  toolCalls?: ToolCallEvent[];
   parts?: LivePart[];
 }
 
@@ -23,7 +24,7 @@ export interface Message {
 // Live Stream Part Types
 // ============================================================================
 
-export type LivePartType = 'text' | 'tool-call' | 'tool-result';
+export type LivePartType = 'text' | 'thinking' | 'tool-call';
 
 export interface LivePart {
   id: string;
@@ -45,6 +46,9 @@ interface ChatState {
   // Live streaming state - array of parts being built in real-time
   liveParts: LivePart[];
 
+  // Tracking for thinking state
+  isThinking: boolean;
+
   // Legacy compatibility
   streamingContent: string;
 
@@ -58,12 +62,10 @@ interface ChatState {
 
   // Live streaming actions
   appendText: (text: string) => void;
+  appendThinking: (text: string) => void;
   addToolCall: (toolCall: ToolCallEvent) => void;
   updateToolCall: (toolCall: ToolCallEvent) => void;
   handleStreamEvent: (event: StreamEvent) => void;
-
-  // Legacy compatibility
-  appendStreamChunk: (chunk: string) => void;
 }
 
 // ============================================================================
@@ -75,6 +77,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   isStreaming: false,
   liveParts: [],
+  isThinking: false,
   streamingContent: '',
 
   setSessionId: (id) => set({ sessionId: id }),
@@ -86,13 +89,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
   startStreaming: () => set({
     isStreaming: true,
     liveParts: [],
+    isThinking: false,
     streamingContent: '',
   }),
+
+  appendThinking: (text) => {
+    set((state) => {
+      const parts = [...state.liveParts];
+      const lastPart = parts[parts.length - 1];
+
+      if (lastPart && lastPart.type === 'thinking') {
+        parts[parts.length - 1] = {
+          ...lastPart,
+          content: (lastPart.content || '') + text,
+        };
+      } else {
+        parts.push({
+          id: `thinking-${Date.now()}`,
+          type: 'thinking',
+          content: text,
+          timestamp: Date.now(),
+        });
+      }
+
+      return { liveParts: parts, isThinking: true };
+    });
+  },
 
   appendText: (text) => {
     set((state) => {
       const parts = [...state.liveParts];
       const lastPart = parts[parts.length - 1];
+
+      // If we were thinking, mark thinking as done
+      const wasThinking = state.isThinking;
 
       // Append to existing text part or create new one
       if (lastPart && lastPart.type === 'text') {
@@ -112,19 +142,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return {
         liveParts: parts,
         streamingContent: state.streamingContent + text,
+        isThinking: wasThinking ? false : state.isThinking,
       };
     });
   },
 
   addToolCall: (toolCall) => {
     set((state) => {
-      // Check if this tool call already exists (prevent duplicates)
       const existingPart = state.liveParts.find(
         (part) => part.type === 'tool-call' && part.toolCall?.id === toolCall.id
       );
 
       if (existingPart) {
-        // Update existing tool call instead of adding duplicate
         const parts = state.liveParts.map((part) => {
           if (part.type === 'tool-call' && part.toolCall?.id === toolCall.id) {
             return { ...part, toolCall };
@@ -133,7 +162,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         });
         return { liveParts: parts };
       } else {
-        // Add new tool call
         return {
           liveParts: [
             ...state.liveParts,
@@ -166,6 +194,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const state = get();
 
     switch (type) {
+      case 'reasoning-delta':
+        if (data.text) {
+          state.appendThinking(data.text);
+        }
+        break;
+
       case 'text-delta':
         if (data.text) {
           state.appendText(data.text);
@@ -186,7 +220,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       case 'step-finish':
       case 'finish':
-        // These are informational, no action needed
         break;
     }
   },
@@ -194,10 +227,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
   finalizeStream: () => {
     const { streamingContent, messages, liveParts } = get();
 
-    // Extract tool calls from live parts
     const toolCalls = liveParts
       .filter(p => p.type === 'tool-call' && p.toolCall)
       .map(p => p.toolCall!);
+
+    const thinkingContent = liveParts
+      .filter(p => p.type === 'thinking' && p.content)
+      .map(p => p.content!)
+      .join('');
 
     const finalizedParts: LivePart[] = liveParts.map((part) => ({
       ...part,
@@ -209,14 +246,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
         : undefined,
     }));
 
-    // Create message if there's content OR tool calls (to persist tool calls)
-    const hasContent = streamingContent.trim() || toolCalls.length > 0;
+    const hasContent = streamingContent.trim() || toolCalls.length > 0 || thinkingContent.trim();
 
     if (hasContent) {
       const finalMsg: Message = {
         id: Date.now().toString(),
         role: 'assistant',
         content: streamingContent,
+        thinking: thinkingContent || undefined,
         timestamp: Date.now(),
         toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
         parts: finalizedParts.length > 0 ? finalizedParts : undefined,
@@ -226,25 +263,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
         messages: [...messages, finalMsg],
         isStreaming: false,
         liveParts: [],
+        isThinking: false,
         streamingContent: '',
       });
     } else {
       set({
         isStreaming: false,
         liveParts: [],
+        isThinking: false,
         streamingContent: '',
       });
     }
   },
 
-  // Legacy compatibility
-  appendStreamChunk: (chunk) => {
-    get().appendText(chunk);
-  },
-
   clearMessages: () => set({
     messages: [],
     liveParts: [],
+    isThinking: false,
     streamingContent: '',
     isStreaming: false,
   }),

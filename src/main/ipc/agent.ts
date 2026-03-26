@@ -487,8 +487,9 @@ function setupSessionListeners(
 
     if (lastAssistantMsg) {
       const contentStr = serializeContent(lastAssistantMsg.content);
+      const reasoningStr = lastAssistantMsg.reasoning ?? null;
       const msgId = uuidv4();
-      insertMessage(msgId, sessionId, 'assistant', contentStr);
+      insertMessage(msgId, sessionId, 'assistant', contentStr, reasoningStr);
 
       // Auto-generate session title from first user message (when 2 msgs exist)
       const dbMessages = getMessages(sessionId);

@@ -77,7 +77,7 @@ function updateBraceDepth(input: string, initialDepth: number): number {
   return depth;
 }
 
-function collectJsonBlock(lines: string[], startLine: number, initialText: string): { endLine: number; jsonText: string } | null {
+function collectJsonBlock(lines: string[], startLine: number, initialText: string): { endLine: number; jsonText: string; depth: number } {
   let text = initialText;
   let depth = updateBraceDepth(initialText, 0);
   let cursor = startLine;
@@ -88,8 +88,7 @@ function collectJsonBlock(lines: string[], startLine: number, initialText: strin
     depth = updateBraceDepth(lines[cursor], depth);
   }
 
-  if (depth !== 0) return null;
-  return { endLine: cursor, jsonText: text };
+  return { endLine: cursor, jsonText: text, depth };
 }
 
 function isValidJsonObject(text: string): boolean {
@@ -125,7 +124,7 @@ function stripRawToolCallArtifacts(text: string): string {
 
     if (remainder.startsWith('{')) {
       const block = collectJsonBlock(lines, i, remainder);
-      if (block && isValidJsonObject(block.jsonText)) {
+      if ((block.depth === 0 && isValidJsonObject(block.jsonText)) || block.depth > 0) {
         i = block.endLine;
         continue;
       }
@@ -135,7 +134,7 @@ function stripRawToolCallArtifacts(text: string): string {
       const nextTrimmed = lines[i + 1].trim();
       if (nextTrimmed.startsWith('{')) {
         const block = collectJsonBlock(lines, i + 1, nextTrimmed);
-        if (block && isValidJsonObject(block.jsonText)) {
+        if ((block.depth === 0 && isValidJsonObject(block.jsonText)) || block.depth > 0) {
           i = block.endLine;
           continue;
         }
@@ -146,39 +145,6 @@ function stripRawToolCallArtifacts(text: string): string {
   }
 
   return kept.join('\n');
-}
-
-function extractThinkingBlocks(text: string): { type: 'text' | 'thinking'; content: string }[] {
-  const blocks: { type: 'text' | 'thinking'; content: string }[] = [];
-  let remaining = text;
-
-  while (remaining.length > 0) {
-    const startIdx = remaining.indexOf('<think>');
-    if (startIdx === -1) {
-      if (remaining.trim()) blocks.push({ type: 'text', content: remaining });
-      break;
-    }
-
-    if (startIdx > 0) {
-      const before = remaining.slice(0, startIdx);
-      if (before.trim()) blocks.push({ type: 'text', content: before });
-    }
-
-    const endIdx = remaining.indexOf('</think>', startIdx + 7);
-    if (endIdx === -1) {
-      // Unclosed think (streaming)
-      const thinkContent = remaining.slice(startIdx + 7).replace(/^[\n\r]+/, '');
-      blocks.push({ type: 'thinking', content: thinkContent });
-      break;
-    } else {
-      // Closed think
-      const thinkContent = remaining.slice(startIdx + 7, endIdx).replace(/^[\n\r]+/, '').replace(/[\n\r]+$/, '');
-      if (thinkContent.trim()) blocks.push({ type: 'thinking', content: thinkContent });
-      remaining = remaining.slice(endIdx + 8);
-    }
-  }
-
-  return blocks;
 }
 
 /**
@@ -476,25 +442,12 @@ const PartsTimeline: React.FC<{ parts: LivePart[]; keyPrefix: string; isLive?: b
           return null;
         }
 
-        const blocks = extractThinkingBlocks(cleanedText);
-
         return (
-          <React.Fragment key={group.key}>
-            {blocks.map((b, i) => b.type === 'thinking' ? (
-               <div key={`${group.key}-think-${i}`} className="message-part-group">
-                 <ThinkingBlock 
-                   content={b.content} 
-                   isLive={isLive && index === groups.length - 1 && i === blocks.length - 1} 
-                 />
-               </div>
-            ) : (
-               <MarkdownRenderer
-                 key={`${group.key}-text-${i}`}
-                 content={b.content}
-                 className="message-part-group message-content markdown"
-               />
-            ))}
-          </React.Fragment>
+          <MarkdownRenderer
+            key={group.key}
+            content={cleanedText}
+            className="message-part-group message-content markdown"
+          />
         );
       })}
     </>
@@ -659,17 +612,10 @@ export const ChatPanel: React.FC = () => {
                             </div>
                           )}
                           {msg.content && (
-                            <React.Fragment>
-                              {extractThinkingBlocks(stripRawToolCallArtifacts(msg.content)).map((b, i) => b.type === 'thinking' ? (
-                                <ThinkingBlock key={`think-${i}`} content={b.content} />
-                              ) : (
-                                <MarkdownRenderer
-                                  key={`text-${i}`}
-                                  content={b.content}
-                                  className="message-content markdown"
-                                />
-                              ))}
-                            </React.Fragment>
+                            <MarkdownRenderer
+                              content={stripRawToolCallArtifacts(msg.content)}
+                              className="message-content markdown"
+                            />
                           )}
                         </>
                       )}

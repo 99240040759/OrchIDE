@@ -257,11 +257,24 @@ export class LLMClient {
           arguments: string;
         }>();
 
+        let contentBuffer = '';
+        let inThinkBlock = false;
+
         try {
           while (true) {
             const { done, value } = await reader.read();
             
-            if (done) break;
+            if (done) {
+              if (contentBuffer.length > 0) {
+                if (inThinkBlock) {
+                  yield { type: 'reasoning_delta', sessionId: '', data: { text: contentBuffer } };
+                } else {
+                  yield { type: 'text_delta', sessionId: '', data: { text: contentBuffer } };
+                }
+                contentBuffer = '';
+              }
+              break;
+            }
 
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split('\n');
@@ -289,11 +302,67 @@ export class LLMClient {
 
                 // Handle content streaming
                 if (choice.delta.content) {
-                  yield {
-                    type: 'text_delta',
-                    sessionId: '',
-                    data: { text: choice.delta.content },
-                  };
+                  contentBuffer += choice.delta.content;
+                  
+                  while (contentBuffer.length > 0) {
+                    if (!inThinkBlock) {
+                      const startIdx = contentBuffer.indexOf('<think>');
+                      if (startIdx !== -1) {
+                        const before = contentBuffer.slice(0, startIdx);
+                        if (before) {
+                          const cleaned = before.replace(/<\/think>[\n\r]*/g, '');
+                          if (cleaned) yield { type: 'text_delta', sessionId: '', data: { text: cleaned } };
+                        }
+                        inThinkBlock = true;
+                        contentBuffer = contentBuffer.slice(startIdx + 7);
+                      } else {
+                        const lastLess = contentBuffer.lastIndexOf('<');
+                        if (lastLess !== -1 && '<think>'.startsWith(contentBuffer.slice(lastLess))) {
+                          const before = contentBuffer.slice(0, lastLess);
+                          if (before) {
+                            const cleaned = before.replace(/<\/think>[\n\r]*/g, '');
+                            if (cleaned) yield { type: 'text_delta', sessionId: '', data: { text: cleaned } };
+                          }
+                          contentBuffer = contentBuffer.slice(lastLess); // Wait for rest of tag
+                          break;
+                        } else {
+                          const cleaned = contentBuffer.replace(/<\/think>[\n\r]*/g, '');
+                          if (cleaned) yield { type: 'text_delta', sessionId: '', data: { text: cleaned } };
+                          contentBuffer = '';
+                        }
+                      }
+                    } else {
+                      const endIdx = contentBuffer.indexOf('</think>');
+                      if (endIdx !== -1) {
+                        const reasoning = contentBuffer.slice(0, endIdx);
+                        if (reasoning) {
+                          yield { type: 'reasoning_delta', sessionId: '', data: { text: reasoning } };
+                        }
+                        inThinkBlock = false;
+                        contentBuffer = contentBuffer.slice(endIdx + 8);
+                        
+                        // Strip leading newline after </think> to avoid weird spacing
+                        if (contentBuffer.startsWith('\n')) {
+                          contentBuffer = contentBuffer.slice(1);
+                        } else if (contentBuffer.startsWith('\r\n')) {
+                          contentBuffer = contentBuffer.slice(2);
+                        }
+                      } else {
+                        const lastLess = contentBuffer.lastIndexOf('<');
+                        if (lastLess !== -1 && '</think>'.startsWith(contentBuffer.slice(lastLess))) {
+                          const reasoning = contentBuffer.slice(0, lastLess);
+                          if (reasoning) {
+                            yield { type: 'reasoning_delta', sessionId: '', data: { text: reasoning } };
+                          }
+                          contentBuffer = contentBuffer.slice(lastLess); // Wait for rest of tag
+                          break;
+                        } else {
+                          yield { type: 'reasoning_delta', sessionId: '', data: { text: contentBuffer } };
+                          contentBuffer = '';
+                        }
+                      }
+                    }
+                  }
                 }
 
                 // Handle tool calls

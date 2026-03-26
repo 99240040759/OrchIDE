@@ -18,6 +18,7 @@ interface MessageRow {
   session_id: string;
   role: string;
   content: string;
+  reasoning: string | null;
   timestamp: number;
 }
 
@@ -88,9 +89,13 @@ function initSchema(db: Database.Database): void {
       updated_at INTEGER NOT NULL,
       FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
     );
-
-
   `);
+
+  try {
+    db.exec(`ALTER TABLE messages ADD COLUMN reasoning TEXT;`);
+  } catch (e) {
+    // Column already exists
+  }
 }
 
 // Sessions
@@ -121,9 +126,9 @@ export function deleteSession(id: string): void {
 }
 
 // Messages
-export function insertMessage(id: string, sessionId: string, role: string, content: string): void {
+export function insertMessage(id: string, sessionId: string, role: string, content: string, reasoning?: string | null): void {
   const db = getDb();
-  db.prepare(`INSERT INTO messages (id, session_id, role, content, timestamp) VALUES (?, ?, ?, ?, ?)`).run(id, sessionId, role, content, Date.now());
+  db.prepare(`INSERT INTO messages (id, session_id, role, content, reasoning, timestamp) VALUES (?, ?, ?, ?, ?, ?)`).run(id, sessionId, role, content, reasoning ?? null, Date.now());
   db.prepare(`UPDATE sessions SET updated_at=? WHERE id=?`).run(Date.now(), sessionId);
 }
 
@@ -133,6 +138,7 @@ export function getMessages(sessionId: string): Message[] {
     id: row.id,
     role: row.role as 'user' | 'assistant' | 'system',
     content: row.content,
+    thinking: row.reasoning ?? undefined,
     timestamp: row.timestamp,
   }));
 }

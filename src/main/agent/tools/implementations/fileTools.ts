@@ -59,7 +59,15 @@ export const readFileImpl: Tool['execute'] = async (
   args: Record<string, unknown>,
   context: ToolContext
 ): Promise<ToolResult> => {
-  const filePath = args.filePath as string;
+  const filePath = (args.filePath || args.path || args.file || args.filename) as string;
+  
+  if (!filePath) {
+    return {
+      output: [{ name: 'Error', description: 'Validation Error', content: 'Missing filePath argument' }],
+      success: false,
+      error: 'Missing filePath argument',
+    };
+  }
   
   if (!context.workspacePath) {
     return {
@@ -106,8 +114,16 @@ export const writeFileImpl: Tool['execute'] = async (
   args: Record<string, unknown>,
   context: ToolContext
 ): Promise<ToolResult> => {
-  const filePath = args.filePath as string;
+  const filePath = (args.filePath || args.path || args.file || args.filename) as string;
   const content = args.content as string;
+  
+  if (!filePath) {
+    return {
+      output: [{ name: 'Error', description: 'Validation Error', content: 'Missing filePath argument' }],
+      success: false,
+      error: 'Missing filePath argument',
+    };
+  }
   
   if (!context.workspacePath) {
     return {
@@ -154,8 +170,16 @@ export const createFileImpl: Tool['execute'] = async (
   args: Record<string, unknown>,
   context: ToolContext
 ): Promise<ToolResult> => {
-  const filePath = args.filePath as string;
+  const filePath = (args.filePath || args.path || args.file || args.filename) as string;
   const content = (args.content as string) ?? '';
+  
+  if (!filePath) {
+    return {
+      output: [{ name: 'Error', description: 'Validation Error', content: 'Missing filePath argument' }],
+      success: false,
+      error: 'Missing filePath argument',
+    };
+  }
   
   if (!context.workspacePath) {
     return {
@@ -202,7 +226,15 @@ export const deleteFileImpl: Tool['execute'] = async (
   args: Record<string, unknown>,
   context: ToolContext
 ): Promise<ToolResult> => {
-  const targetPath = args.targetPath as string;
+  const targetPath = (args.targetPath || args.path || args.file || args.filePath || args.filename) as string;
+  
+  if (!targetPath) {
+    return {
+      output: [{ name: 'Error', description: 'Validation Error', content: 'Missing targetPath argument' }],
+      success: false,
+      error: 'Missing targetPath argument',
+    };
+  }
   
   if (!context.workspacePath) {
     return {

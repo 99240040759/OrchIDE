@@ -168,6 +168,12 @@ export class ToolLoop {
               }
               break;
 
+            case 'reasoning_delta':
+              if (event.data.text) {
+                this.history.appendToLastAssistant(event.data.text, true);
+              }
+              break;
+
             case 'tool_call_start':
             case 'tool_call_delta':
               if (event.data.toolCallDelta) {

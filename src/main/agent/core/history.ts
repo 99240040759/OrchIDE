@@ -173,12 +173,17 @@ export class ChatHistory {
   }
 
   /**
-   * Append content to the last assistant message (for streaming)
+   * Append content or reasoning to the last assistant message (for streaming)
    */
-  appendToLastAssistant(content: string): void {
+  appendToLastAssistant(content: string, isReasoning = false): void {
     const last = this.getLast();
     if (last && last.message.role === 'assistant') {
-      last.message.content = (last.message.content ?? '') + content;
+      const msg = last.message as import('./types').AssistantMessage;
+      if (isReasoning) {
+        msg.reasoning = (msg.reasoning ?? '') + content;
+      } else {
+        msg.content = (msg.content ?? '') + content;
+      }
     }
   }
 

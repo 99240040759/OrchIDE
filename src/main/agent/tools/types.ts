@@ -270,27 +270,74 @@ export type BuiltInToolName = typeof BuiltInToolNames[keyof typeof BuiltInToolNa
 // ============================================================================
 
 /**
- * Parse tool call arguments from JSON string
+ * Robust JSON parsing rescue to extract key-values from broken strings like:
+ * {"dirPath": "node_modules" | head}, "command": ...}
+ */
+function rescueJson(args: string): Record<string, unknown> {
+  let repaired = args.replace(/:\\s*True/g, ': true').replace(/:\\s*False/g, ': false');
+  repaired = repaired.replace(/,\\s*([}\\]])/g, '$1');
+  try {
+    return JSON.parse(repaired);
+  } catch {
+    // Dirty fallback regex to extract anything resembling "key": "value"
+    const result: Record<string, unknown> = {};
+    const regex = /"([^"]+)"\\s*:\\s*(?:"((?:\\\\"|[^"])*)"|([^\n,}]+))/g;
+    let match;
+    while ((match = regex.exec(args)) !== null) {
+      const key = match[1];
+      const stringVal = match[2];
+      const otherVal = match[3];
+      if (stringVal !== undefined) {
+        // Unescape escaped quotes if any inside
+        result[key] = stringVal.replace(/\\"/g, '"');
+      } else if (otherVal !== undefined) {
+        const v = otherVal.trim();
+        if (v === 'true') result[key] = true;
+        else if (v === 'false') result[key] = false;
+        else if (v === 'null') result[key] = null;
+        else if (!isNaN(Number(v)) && v !== '') result[key] = Number(v);
+        else result[key] = v; // raw string fallback
+      }
+    }
+    return result;
+  }
+}
+
+/**
+ * Parse tool call arguments from JSON string, with robust rescue and rewrite
+ * to ensure that history passed to LLM does not contain invalid JSON, 
+ * which crashes some downstream APIs (e.g. NVIDIA NIM / Llama jinja templating).
  */
 export function parseToolCallArgs(toolCall: ToolCall): Record<string, unknown> {
+  let args = toolCall.function.arguments;
+  if (!args || args.trim() === '') {
+    toolCall.function.arguments = '{}';
+    return {};
+  }
+  
   try {
-    return JSON.parse(toolCall.function.arguments);
+    const parsed = JSON.parse(args);
+    return parsed;
   } catch {
-    // If parsing fails, try to extract args from malformed JSON
-    const args = toolCall.function.arguments;
-    
     // Common case: LLM outputs double-encoded JSON
     if (args.startsWith('"') && args.endsWith('"')) {
       try {
-        return JSON.parse(JSON.parse(args));
+        const parsed = JSON.parse(JSON.parse(args));
+        toolCall.function.arguments = JSON.stringify(parsed);
+        return parsed;
       } catch {
-        // Fall through
+        // Fall through to rescue
       }
     }
     
-    // Return empty object as fallback
-    console.warn(`Failed to parse tool call args: ${args}`);
-    return {};
+    console.warn(`[Agent] Failed to parse tool call args cleanly, attempting rescue: ${args}`);
+    const rescued = rescueJson(args);
+    
+    // CRITICAL: Rewrite the invalid string in the toolCall immediately!
+    // This prevents API 500 crashes on the next iteration when history is serialized.
+    toolCall.function.arguments = JSON.stringify(rescued);
+    
+    return rescued;
   }
 }
 

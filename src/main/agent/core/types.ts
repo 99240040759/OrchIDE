@@ -82,7 +82,7 @@ export type ChatMessage = SystemMessage | UserMessage | AssistantMessage | ToolM
 // Tool Call State (for tracking tool execution)
 // ============================================================================
 
-export type ToolCallStatus = 
+export type ToolCallStatus =
   | 'generating'     // Tool call being streamed
   | 'generated'      // Tool call complete, waiting for execution
   | 'pending_approval' // Waiting for user approval
@@ -179,7 +179,7 @@ export interface Session extends SessionMetadata {
 // Plan Types (for large projects)
 // ============================================================================
 
-export type PlanStatus = 
+export type PlanStatus =
   | 'draft'          // Being generated
   | 'pending_approval' // Waiting for user approval
   | 'approved'       // User approved, ready to execute
@@ -188,7 +188,7 @@ export type PlanStatus =
   | 'paused'         // User paused execution
   | 'failed';        // Execution failed
 
-export type PlanStepStatus = 
+export type PlanStepStatus =
   | 'pending'
   | 'in_progress'
   | 'completed'
@@ -225,7 +225,7 @@ export interface Plan {
 // Tool Policy Types
 // ============================================================================
 
-export type ToolPolicy = 
+export type ToolPolicy =
   | 'allowedWithoutPermission'  // Auto-execute
   | 'allowedWithPermission'     // Require user approval
   | 'disabled';                 // Never execute
@@ -402,32 +402,32 @@ export interface StreamEvent {
 export interface StreamEventData {
   // Text streaming
   text?: string;
-  
+
   // Tool call events
   toolCall?: ToolCall;
   toolCallDelta?: ToolCallDelta;
   toolCallState?: ToolCallState;
-  
+
   // Reasoning
   reasoning?: string;
-  
+
   // Plan events
   plan?: Plan;
   planStep?: PlanStep;
-  
+
   // Approval
   approvalRequest?: ApprovalRequest;
-  
+
   // Task boundary
   taskBoundary?: TaskBoundaryData;
-  
+
   // Notify user
   notifyUser?: NotifyUserData;
-  
+
   // Completion
   finishReason?: 'stop' | 'tool_calls' | 'length' | 'content_filter';
   usage?: Usage;
-  
+
   // Error
   error?: string;
 }
@@ -527,38 +527,38 @@ export interface AgentConfig {
   apiBase: string;
   temperature: number;
   maxTokens: number;
-  
+
   // Workspace
   workspaceName?: string;
-  
+
   // Agent behavior
   maxToolCalls: number;
   maxToolIterations: number; // For tool loop
   maxRecursionDepth: number;
   maxConcurrentToolCalls: number;
-  
+
   // Plan behavior
   requirePlanApproval: boolean; // Whether to require user approval for plans
-  
+
   // Loop detection
   maxIdenticalToolCalls: number;
   maxIdenticalToolResults: number;
-  
+
   // Context management
   contextWindowSize: number;
   compactionThreshold: number; // Percentage of context before compaction
-  
+
   // Timeouts
   toolTimeoutMs: number;
   llmTimeoutMs: number;
 }
 
 export const DEFAULT_AGENT_CONFIG: AgentConfig = {
-  model: 'meta/llama-3.3-70b-instruct',
+  model: 'moonshotai/kimi-k2-thinking',
   apiKey: '',
   apiBase: 'https://integrate.api.nvidia.com/v1',
-  temperature: 0.2,
-  maxTokens: 4096,
+  temperature: 0.6,
+  maxTokens: 32768, // Massive budget for <think> chains
   maxToolCalls: 500,
   maxToolIterations: 25,
   maxRecursionDepth: 150,

@@ -148,6 +148,39 @@ function stripRawToolCallArtifacts(text: string): string {
   return kept.join('\n');
 }
 
+function extractThinkingBlocks(text: string): { type: 'text' | 'thinking'; content: string }[] {
+  const blocks: { type: 'text' | 'thinking'; content: string }[] = [];
+  let remaining = text;
+
+  while (remaining.length > 0) {
+    const startIdx = remaining.indexOf('<think>');
+    if (startIdx === -1) {
+      if (remaining.trim()) blocks.push({ type: 'text', content: remaining });
+      break;
+    }
+
+    if (startIdx > 0) {
+      const before = remaining.slice(0, startIdx);
+      if (before.trim()) blocks.push({ type: 'text', content: before });
+    }
+
+    const endIdx = remaining.indexOf('</think>', startIdx + 7);
+    if (endIdx === -1) {
+      // Unclosed think (streaming)
+      const thinkContent = remaining.slice(startIdx + 7).replace(/^[\n\r]+/, '');
+      blocks.push({ type: 'thinking', content: thinkContent });
+      break;
+    } else {
+      // Closed think
+      const thinkContent = remaining.slice(startIdx + 7, endIdx).replace(/^[\n\r]+/, '').replace(/[\n\r]+$/, '');
+      if (thinkContent.trim()) blocks.push({ type: 'thinking', content: thinkContent });
+      remaining = remaining.slice(endIdx + 8);
+    }
+  }
+
+  return blocks;
+}
+
 /**
  * Get icon for tool based on name - uses unified TOOL_CONFIG
  */
@@ -443,12 +476,25 @@ const PartsTimeline: React.FC<{ parts: LivePart[]; keyPrefix: string; isLive?: b
           return null;
         }
 
+        const blocks = extractThinkingBlocks(cleanedText);
+
         return (
-          <MarkdownRenderer
-            key={group.key}
-            content={cleanedText}
-            className="message-part-group message-content markdown"
-          />
+          <React.Fragment key={group.key}>
+            {blocks.map((b, i) => b.type === 'thinking' ? (
+               <div key={`${group.key}-think-${i}`} className="message-part-group">
+                 <ThinkingBlock 
+                   content={b.content} 
+                   isLive={isLive && index === groups.length - 1 && i === blocks.length - 1} 
+                 />
+               </div>
+            ) : (
+               <MarkdownRenderer
+                 key={`${group.key}-text-${i}`}
+                 content={b.content}
+                 className="message-part-group message-content markdown"
+               />
+            ))}
+          </React.Fragment>
         );
       })}
     </>
@@ -503,6 +549,7 @@ export const ChatPanel: React.FC = () => {
   const activeWorkspace = useWorkspaceStore((state) => state.activeWorkspace);
 
   const threadMessagesRef = useRef<HTMLDivElement>(null);
+  const innerContentRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
 
   // Track whether user is near the bottom
@@ -520,12 +567,12 @@ export const ChatPanel: React.FC = () => {
     return () => container.removeEventListener('scroll', onScroll);
   }, []);
 
-  // Auto-scroll on DOM mutations (the most bulletproof method)
-  // Note: We DON'T watch characterData to avoid firing on every character during streaming
-  // Instead, we only watch childList which fires on new messages/elements
+  // Industry-grade auto-scroll via ResizeObserver
+  // Fires precisely when the text block logically wraps or new content is streamed natively.
   useEffect(() => {
     const container = threadMessagesRef.current;
-    if (!container) return;
+    const content = innerContentRef.current;
+    if (!container || !content) return;
 
     const scrollToBottom = () => {
       if (!shouldAutoScrollRef.current) return;
@@ -540,20 +587,14 @@ export const ChatPanel: React.FC = () => {
     // Scroll immediately on setup
     requestAnimationFrame(scrollToBottom);
 
-    // Watch for new children/subtree changes only - NOT characterData
-    // This prevents firing on every character during streaming while still scrolling on new messages
-    const observer = new MutationObserver(() => {
+    const observer = new ResizeObserver(() => {
       requestAnimationFrame(scrollToBottom);
     });
 
-    observer.observe(container, {
-      childList: true,
-      subtree: true,
-      characterData: false, // CRITICAL: Don't watch character changes - causes massive thrashing during streaming
-    });
+    observer.observe(content);
 
     return () => observer.disconnect();
-  }, []); // Remove isStreaming from deps - observer should be stable
+  }, [isStreaming]);
 
   const isEmpty = messages.length === 0 && !isStreaming;
 
@@ -594,6 +635,7 @@ export const ChatPanel: React.FC = () => {
       ) : (
         <div className="chatpanel-thread">
           <div className="thread-messages" ref={threadMessagesRef}>
+            <div className="thread-messages-inner" ref={innerContentRef}>
             {messages.map((msg) => (
               <div key={msg.id} className={`message-row ${msg.role}`}>
                 <div className="message-bubble">
@@ -617,10 +659,17 @@ export const ChatPanel: React.FC = () => {
                             </div>
                           )}
                           {msg.content && (
-                            <MarkdownRenderer
-                              content={stripRawToolCallArtifacts(msg.content)}
-                              className="message-content markdown"
-                            />
+                            <React.Fragment>
+                              {extractThinkingBlocks(stripRawToolCallArtifacts(msg.content)).map((b, i) => b.type === 'thinking' ? (
+                                <ThinkingBlock key={`think-${i}`} content={b.content} />
+                              ) : (
+                                <MarkdownRenderer
+                                  key={`text-${i}`}
+                                  content={b.content}
+                                  className="message-content markdown"
+                                />
+                              ))}
+                            </React.Fragment>
                           )}
                         </>
                       )}
@@ -633,6 +682,7 @@ export const ChatPanel: React.FC = () => {
             ))}
 
             <LiveStreamContent />
+            </div>
           </div>
 
           <div className="thread-input-area">

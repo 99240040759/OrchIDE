@@ -29,6 +29,8 @@ import { ContextManager } from './context';
 import { buildSystemPrompt } from './systemPrompt';
 import { getSessionDir } from '../../appdata';
 import { loadSettings } from '../../appdata';
+import { KnowledgeItemManager } from './knowledgeItems';
+import { ModeEnforcer, type AgentMode, type ToolPermissionResult } from './modeEnforcement';
 
 // ============================================================================
 // Types
@@ -68,6 +70,8 @@ export class AgentSession extends EventEmitter {
   private toolRegistry: ToolRegistry;
   private toolLoop: ToolLoop;
   private contextManager: ContextManager;
+  private kiManager: KnowledgeItemManager;
+  private modeEnforcer: ModeEnforcer;
   
   private config: AgentConfig;
   private state: SessionState = 'idle';
@@ -93,14 +97,32 @@ export class AgentSession extends EventEmitter {
     // Initialize LLM client
     this.llmClient = new LLMClient(sessionConfig.llmConfig);
     
-    // Build the full Antigravity-level system prompt
+    // Initialize KI (Knowledge Item) Manager for persistent workspace memory
+    this.kiManager = new KnowledgeItemManager({
+      workspacePath: this.workspacePath,
+      maxContextTokens: 6000,
+      enableAutoDiscovery: true,
+    });
+    
+    // Initialize Mode Enforcer for execution boundaries
+    this.modeEnforcer = new ModeEnforcer();
+    
+    // Build the full Antigravity-level system prompt with KI context
     const sessionDir = getSessionDir(this.sessionId);
+    
+    // Load knowledge items for context injection (sync for now, will be empty on first load)
+    const kiContext = this.kiManager.selectForContext(6000).items
+      .map(ki => `### ${ki.name}\n${ki.content}`)
+      .join('\n\n');
+    
     const systemPrompt = sessionConfig.systemPrompt || buildSystemPrompt({
       workspacePath: this.workspacePath,
       workspaceName: sessionConfig.agentConfig?.workspaceName || '',
       sessionId: this.sessionId,
       platform: process.platform,
       sessionStoragePath: sessionDir,
+      knowledgeContext: kiContext, // Inject KI context
+      currentMode: this.modeEnforcer.getCurrentMode(), // Inject current mode
     });
     this.history = new ChatHistory(systemPrompt);
     
@@ -113,7 +135,7 @@ export class AgentSession extends EventEmitter {
     // Initialize context manager
     this.contextManager = new ContextManager(this.history, this.config);
     
-    // Initialize tool loop
+    // Initialize tool loop with mode enforcer
     this.toolLoop = new ToolLoop({
       session: this,
       llmClient: this.llmClient,
@@ -121,6 +143,7 @@ export class AgentSession extends EventEmitter {
       toolRegistry: this.toolRegistry,
       config: this.config,
       contextManager: this.contextManager,
+      modeEnforcer: this.modeEnforcer,
       onStream: (event) => this.emit('stream', event),
       onAgentEvent: (event) => this.emit('agent_event', event),
       onToolApprovalRequired: (calls) => this.handleToolApprovalRequired(calls),
@@ -371,6 +394,76 @@ export class AgentSession extends EventEmitter {
     if (session.plan) {
       this.currentPlan = session.plan;
     }
+  }
+
+  // ==========================================================================
+  // Mode Control API
+  // ==========================================================================
+
+  /**
+   * Get the current agent mode
+   */
+  getMode(): AgentMode {
+    return this.modeEnforcer.getCurrentMode();
+  }
+
+  /**
+   * Set the agent mode (planning, execution, verification)
+   */
+  setMode(mode: AgentMode, reason: string = 'User request'): void {
+    this.modeEnforcer.transitionTo(mode, reason);
+    this.emit('agent_event', {
+      type: 'mode_changed',
+      mode,
+      timestamp: Date.now(),
+    });
+  }
+
+  /**
+   * Validate if a tool is allowed in the current mode
+   */
+  validateToolForMode(toolName: string): ToolPermissionResult {
+    return this.modeEnforcer.checkToolPermission(toolName);
+  }
+
+  // ==========================================================================
+  // Knowledge Item API
+  // ==========================================================================
+
+  /**
+   * Get the KI manager for external access
+   */
+  getKIManager(): KnowledgeItemManager {
+    return this.kiManager;
+  }
+
+  /**
+   * Refresh knowledge items from disk
+   */
+  async refreshKnowledgeItems(): Promise<void> {
+    await this.kiManager.scanKnowledgeItems();
+  }
+
+  /**
+   * Create a new knowledge item
+   */
+  async createKnowledgeItem(
+    id: string,
+    content: string,
+    metadata?: { category?: string; priority?: number; tags?: string[] }
+  ): Promise<void> {
+    await this.kiManager.save(id, content, {
+      category: metadata?.category as any,
+      priority: metadata?.priority,
+      tags: metadata?.tags,
+    });
+  }
+
+  /**
+   * Update an existing knowledge item
+   */
+  async updateKnowledgeItem(id: string, content: string): Promise<void> {
+    await this.kiManager.save(id, content);
   }
 
   // ==========================================================================

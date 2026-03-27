@@ -3,9 +3,11 @@
  *
  * Implements a ReAct-style (Reason + Act) tool execution loop with:
  * - In-loop context compaction (prevents context window overflow)
- * - Fuzzy duplicate detection (catches near-identical tool call loops)
- * - Stall breaker (detects read→edit→fail cycles and injects corrective hints)
- * - Tool result truncation (prevents single tool output from bloating context)
+ * - Levenshtein-based fuzzy duplicate detection (catches near-identical tool call loops)
+ * - Advanced stall breaker (detects read→edit→fail cycles and injects corrective hints)
+ * - Head+tail tool result truncation (preserves errors while limiting context)
+ * - Ephemeral hint injection (guides LLM without polluting user-visible transcript)
+ * - Mode enforcement integration (planning/execution/verification boundaries)
  *
  * Key invariants (OpenAI message ordering rules):
  *  1. Assistant message is started BEFORE streaming begins.
@@ -28,22 +30,30 @@ import type { ToolRegistry } from '../tools/registry';
 import type { AgentSession } from './session';
 import type { ContextManager } from './context';
 import { evaluateToolPolicy } from '../tools/policies';
+import { truncateToolResult, truncateTerminalOutput } from './truncation';
+import type { ModeEnforcer } from './modeEnforcement';
 
 // ============================================================================
 // Constants
 // ============================================================================
 
 /** Max characters for a single tool result before truncation */
-const MAX_TOOL_RESULT_CHARS = 4000;
+const MAX_TOOL_RESULT_CHARS = 6000;
 
 /** Run compaction every N iterations */
-const COMPACTION_INTERVAL = 5;
+const COMPACTION_INTERVAL = 4;
 
 /** Number of consecutive similar tool calls before triggering stall detection */
 const FUZZY_DUPLICATE_THRESHOLD = 3;
 
 /** Max times a file can be the target of failed edits before stall breaker fires */
 const MAX_FILE_EDIT_FAILURES = 3;
+
+/** Similarity threshold for fuzzy argument matching (0-1) */
+const FUZZY_SIMILARITY_THRESHOLD = 0.85;
+
+/** Max stall hints to inject before forcing break */
+const MAX_STALL_HINTS = 2;
 
 // ============================================================================
 // Types
@@ -56,6 +66,7 @@ export interface ToolLoopConfig {
   toolRegistry: ToolRegistry;
   config: AgentConfig;
   contextManager: ContextManager;
+  modeEnforcer?: ModeEnforcer;
   onStream: (event: StreamEvent) => void;
   onAgentEvent: (event: unknown) => void;
   onToolApprovalRequired: (toolCalls: ToolCallState[]) => Promise<void>;
@@ -65,8 +76,19 @@ export interface ToolLoopConfig {
 interface ToolUsageRecord {
   toolName: string;
   filePath: string | null;
+  arguments: string;
   succeeded: boolean;
   iteration: number;
+  timestamp: number;
+}
+
+/** Result of stall detection analysis */
+interface StallDetectionResult {
+  stalled: boolean;
+  reason: string;
+  hint: string;
+  severity: 'warning' | 'critical';
+  pattern: string;
 }
 
 // ============================================================================
@@ -80,6 +102,7 @@ export class ToolLoop {
   private tools: ToolRegistry;
   private config: AgentConfig;
   private contextManager: ContextManager;
+  private modeEnforcer?: ModeEnforcer;
   private onStream: (event: StreamEvent) => void;
   private onAgentEvent: (event: unknown) => void;
   private onToolApprovalRequired: (toolCalls: ToolCallState[]) => Promise<void>;
@@ -91,6 +114,7 @@ export class ToolLoop {
     this.tools = config.toolRegistry;
     this.config = config.config;
     this.contextManager = config.contextManager;
+    this.modeEnforcer = config.modeEnforcer;
     this.onStream = config.onStream;
     this.onAgentEvent = config.onAgentEvent;
     this.onToolApprovalRequired = config.onToolApprovalRequired;
@@ -250,12 +274,29 @@ export class ToolLoop {
         }
 
         // -----------------------------------------------------------------------
-        // 7. Policy check: split into auto-approved vs needs-human-approval
+        // 7. Mode enforcement check (planning/execution/verification boundaries)
+        // -----------------------------------------------------------------------
+        if (this.modeEnforcer) {
+          for (const tc of pendingToolCalls) {
+            const modeResult = this.modeEnforcer.checkToolPermission(tc.toolCall.function.name);
+            if (!modeResult.allowed) {
+              tc.status = 'errored';
+              tc.error = `Mode violation: ${modeResult.reason}${modeResult.suggestedMode ? ` Try switching to ${modeResult.suggestedMode} mode.` : ''}`;
+              console.warn(`[ToolLoop] Mode violation for ${tc.toolCall.function.name}: ${modeResult.reason}`);
+            }
+          }
+        }
+
+        // Filter out mode-blocked tools
+        const modeAllowedTools = pendingToolCalls.filter((tc) => tc.status !== 'errored');
+
+        // -----------------------------------------------------------------------
+        // 8. Policy check: split into auto-approved vs needs-human-approval
         // -----------------------------------------------------------------------
         const toolsNeedingApproval: ToolCallState[] = [];
         const toolsAutoApproved: ToolCallState[] = [];
 
-        for (const tc of pendingToolCalls) {
+        for (const tc of modeAllowedTools) {
           const tool = this.tools.get(tc.toolCall.function.name);
           const policyResult = await evaluateToolPolicy(
             tc.toolCall,
@@ -275,14 +316,14 @@ export class ToolLoop {
         }
 
         // -----------------------------------------------------------------------
-        // 8. Ask for human approval if required
+        // 9. Ask for human approval if required
         // -----------------------------------------------------------------------
         if (toolsNeedingApproval.length > 0) {
           await this.onToolApprovalRequired(toolsNeedingApproval);
         }
 
         // -----------------------------------------------------------------------
-        // 9. Execute all approved tool calls (with result truncation)
+        // 10. Execute all approved tool calls (with result truncation)
         // -----------------------------------------------------------------------
         const toExecute = [
           ...toolsAutoApproved,
@@ -292,18 +333,20 @@ export class ToolLoop {
         for (const tc of toExecute) {
           const succeeded = await this.executeToolCall(tc, signal);
 
-          // Record in fuzzy usage log for stall detection
+          // Record in fuzzy usage log for stall detection (enhanced with arguments)
           const filePath = this.extractFilePath(tc);
           toolUsageLog.push({
             toolName: tc.toolCall.function.name,
             filePath,
+            arguments: tc.toolCall.function.arguments || '',
             succeeded,
             iteration: iterations,
+            timestamp: Date.now(),
           });
         }
 
         // -----------------------------------------------------------------------
-        // 10. Fuzzy stall detection (the main circuit breaker)
+        // 11. Fuzzy stall detection (the main circuit breaker)
         // -----------------------------------------------------------------------
         const stallResult = this.detectStall(toolUsageLog, iterations);
         if (stallResult.stalled) {
@@ -323,7 +366,7 @@ export class ToolLoop {
         }
 
         // -----------------------------------------------------------------------
-        // 11. Verify all tool calls settled
+        // 12. Verify all tool calls settled
         // -----------------------------------------------------------------------
         if (!this.history.areAllToolCallsComplete()) {
           console.log('[ToolLoop] Some tool calls not settled — stopping loop');
@@ -351,12 +394,12 @@ export class ToolLoop {
   }
 
   // ============================================================================
-  // Tool Execution (with result truncation)
+  // Tool Execution (with head+tail truncation)
   // ============================================================================
 
   /**
-   * Execute a single tool call, truncate its result, and write into history.
-   * Returns true if succeeded, false if failed.
+   * Execute a single tool call, truncate its result using head+tail strategy,
+   * and write into history. Returns true if succeeded, false if failed.
    */
   private async executeToolCall(tc: ToolCallState, signal: AbortSignal): Promise<boolean> {
     const toolName = tc.toolCall.function.name;
@@ -380,10 +423,16 @@ export class ToolLoop {
       // Flatten context items to a single string
       let outputContent = result.output.map((item) => item.content).join('\n\n');
 
-      // ---- TRUNCATION: prevent single tool result from bloating context ----
+      // ---- HEAD+TAIL TRUNCATION: preserve errors while limiting context ----
       if (outputContent.length > MAX_TOOL_RESULT_CHARS) {
-        const truncated = outputContent.slice(0, MAX_TOOL_RESULT_CHARS);
-        outputContent = truncated + `\n\n[Output truncated — showing first ${MAX_TOOL_RESULT_CHARS} of ${outputContent.length} chars]`;
+        // Use terminal truncation for terminal commands (more tail-heavy)
+        const isTerminalTool = toolName === 'runTerminalCommand' || 
+                               toolName === 'startTerminalCommand' ||
+                               toolName === 'getCommandStatus';
+        
+        outputContent = isTerminalTool
+          ? truncateTerminalOutput(outputContent)
+          : truncateToolResult(outputContent);
       }
 
       // Add the tool result message
@@ -426,49 +475,55 @@ export class ToolLoop {
   }
 
   // ============================================================================
-  // Stall Detection
+  // Stall Detection — Levenshtein-Based Fuzzy Analysis
   // ============================================================================
 
   /**
-   * Fuzzy stall detection — catches patterns like:
+   * Advanced stall detection with Levenshtein-based fuzzy matching.
+   * Catches patterns like:
    * - Same file read 3+ times in recent iterations
    * - Same file edited and failed 3+ times
    * - readFile→replaceFileContent→fail cycle on same target
+   * - Near-identical tool arguments (fuzzy match)
+   * - Terminal command repetition
    */
   private detectStall(
     log: ToolUsageRecord[],
     currentIteration: number
-  ): { stalled: boolean; reason: string; hint: string } {
+  ): StallDetectionResult {
     // Only look at the last 8 iterations
     const window = 8;
     const recent = log.filter((r) => r.iteration > currentIteration - window);
 
     if (recent.length < 4) {
-      return { stalled: false, reason: '', hint: '' };
+      return { stalled: false, reason: '', hint: '', severity: 'warning', pattern: '' };
     }
 
     // ---- Pattern 1: Same file edited and failed N+ times ----
     const editTools = new Set(['replaceFileContent', 'multiReplaceFileContent', 'writeFile']);
-    const editFailures = new Map<string, number>();
+    const editFailures = new Map<string, { count: number; args: string[] }>();
 
     for (const record of recent) {
       if (editTools.has(record.toolName) && !record.succeeded && record.filePath) {
         const key = record.filePath;
-        editFailures.set(key, (editFailures.get(key) || 0) + 1);
+        const existing = editFailures.get(key) || { count: 0, args: [] };
+        existing.count++;
+        existing.args.push(record.arguments);
+        editFailures.set(key, existing);
       }
     }
 
-    for (const [filePath, count] of editFailures) {
-      if (count >= MAX_FILE_EDIT_FAILURES) {
+    for (const [filePath, data] of editFailures) {
+      if (data.count >= MAX_FILE_EDIT_FAILURES) {
+        // Check if arguments are similar (indicates same mistake repeated)
+        const argsSimilar = this.areArgumentsSimilar(data.args);
+
         return {
           stalled: true,
-          reason: `replaceFileContent failed ${count} times on ${filePath}`,
-          hint:
-            `The replaceFileContent tool has failed ${count} times on "${filePath}". ` +
-            'The targetContent string is probably not matching the actual file contents. ' +
-            'You should: (1) Use readFile to see the EXACT current content of the file, ' +
-            'then (2) Copy the exact text you want to replace, character-for-character, ' +
-            'OR (3) Use writeFile to completely rewrite the file if the edits are extensive.',
+          reason: `Edit failed ${data.count} times on ${filePath}${argsSimilar ? ' with similar content' : ''}`,
+          hint: this.generateEditFailureHint(filePath, data.count, argsSimilar),
+          severity: data.count >= 4 ? 'critical' : 'warning',
+          pattern: 'repeated_edit_failure',
         };
       }
     }
@@ -493,18 +548,20 @@ export class ToolLoop {
           reason: `readFile called ${count} times on ${filePath} without successful edit`,
           hint:
             `You have read "${filePath}" ${count} times without making a successful edit. ` +
-            'Stop re-reading the file and either: (1) Use writeFile to rewrite the entire file, ' +
-            'or (2) Move on to a different approach entirely. ' +
-            'Reading the same file repeatedly will not change its contents.',
+            'STOP re-reading and try one of these:\n' +
+            '1. Use writeFile to completely rewrite the file\n' +
+            '2. Accept the current state and move on\n' +
+            '3. Ask the user for clarification on what change is needed',
+          severity: count >= 5 ? 'critical' : 'warning',
+          pattern: 'read_without_edit',
         };
       }
     }
 
-    // ---- Pattern 3: Same searchInFiles pattern repeated 3+ times ----
+    // ---- Pattern 3: Search pattern repetition ----
     const searchPatterns = new Map<string, number>();
     for (const record of recent) {
       if (record.toolName === 'searchInFiles' || record.toolName === 'grepSearch') {
-        // Use filePath as a proxy for the search pattern (it's stored there by extractFilePath)
         const key = record.filePath || 'unknown';
         searchPatterns.set(key, (searchPatterns.get(key) || 0) + 1);
       }
@@ -514,16 +571,195 @@ export class ToolLoop {
       if (count >= FUZZY_DUPLICATE_THRESHOLD) {
         return {
           stalled: true,
-          reason: `searchInFiles called ${count} times with similar parameters`,
+          reason: `Search repeated ${count} times with similar pattern`,
           hint:
             'You are searching for the same thing repeatedly. ' +
             'The search results are not changing between calls. ' +
-            'Use the results you already have, or try a different search query.',
+            'Either:\n' +
+            '1. Use the results you already have\n' +
+            '2. Try a completely different search query\n' +
+            '3. The content you\'re looking for may not exist in this codebase',
+          severity: 'warning',
+          pattern: 'repeated_search',
         };
       }
     }
 
-    return { stalled: false, reason: '', hint: '' };
+    // ---- Pattern 4: Fuzzy argument similarity across all recent calls ----
+    const fuzzyDuplicates = this.detectFuzzyDuplicates(recent);
+    if (fuzzyDuplicates) {
+      return fuzzyDuplicates;
+    }
+
+    // ---- Pattern 5: Terminal command repetition ----
+    const terminalCommands = recent.filter(
+      (r) => r.toolName === 'runTerminalCommand' || r.toolName === 'startTerminalCommand'
+    );
+    const cmdCounts = new Map<string, number>();
+
+    for (const record of terminalCommands) {
+      const cmd = record.filePath || ''; // filePath stores cmd:... for terminal
+      cmdCounts.set(cmd, (cmdCounts.get(cmd) || 0) + 1);
+    }
+
+    for (const [cmd, count] of cmdCounts) {
+      if (count >= 3) {
+        return {
+          stalled: true,
+          reason: `Terminal command repeated ${count} times`,
+          hint:
+            `The command "${cmd.replace('cmd:', '').slice(0, 50)}..." has been run ${count} times. ` +
+            'If it\'s failing, try:\n' +
+            '1. Check the error message carefully\n' +
+            '2. Fix the underlying issue before re-running\n' +
+            '3. Try a different command or approach',
+          severity: 'warning',
+          pattern: 'repeated_command',
+        };
+      }
+    }
+
+    return { stalled: false, reason: '', hint: '', severity: 'warning', pattern: '' };
+  }
+
+  /**
+   * Detect fuzzy duplicates using Levenshtein distance on arguments.
+   */
+  private detectFuzzyDuplicates(recent: ToolUsageRecord[]): StallDetectionResult | null {
+    // Group by tool name
+    const byTool = new Map<string, ToolUsageRecord[]>();
+    for (const record of recent) {
+      const existing = byTool.get(record.toolName) || [];
+      existing.push(record);
+      byTool.set(record.toolName, existing);
+    }
+
+    // Check each tool for fuzzy duplicates
+    for (const [toolName, records] of byTool) {
+      if (records.length < FUZZY_DUPLICATE_THRESHOLD) continue;
+
+      // Compare recent arguments for similarity
+      const recentArgs = records.slice(-FUZZY_DUPLICATE_THRESHOLD).map((r) => r.arguments);
+      let similarCount = 0;
+
+      for (let i = 1; i < recentArgs.length; i++) {
+        const similarity = this.calculateStringSimilarity(recentArgs[0], recentArgs[i]);
+        if (similarity >= FUZZY_SIMILARITY_THRESHOLD) {
+          similarCount++;
+        }
+      }
+
+      if (similarCount >= FUZZY_DUPLICATE_THRESHOLD - 1) {
+        return {
+          stalled: true,
+          reason: `${toolName} called ${records.length} times with ~${Math.round(FUZZY_SIMILARITY_THRESHOLD * 100)}% similar arguments`,
+          hint:
+            `You are calling ${toolName} repeatedly with nearly identical arguments. ` +
+            'This is unlikely to produce different results. Try a fundamentally different approach.',
+          severity: 'warning',
+          pattern: 'fuzzy_duplicate',
+        };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Calculate string similarity using Levenshtein distance.
+   * Returns 0-1 where 1 = identical.
+   */
+  private calculateStringSimilarity(a: string, b: string): number {
+    if (a === b) return 1;
+    if (a.length === 0 || b.length === 0) return 0;
+
+    // Limit comparison length for performance
+    const maxLen = 500;
+    const aSlice = a.slice(0, maxLen);
+    const bSlice = b.slice(0, maxLen);
+
+    const distance = this.levenshteinDistance(aSlice, bSlice);
+    const maxPossible = Math.max(aSlice.length, bSlice.length);
+
+    return 1 - distance / maxPossible;
+  }
+
+  /**
+   * Levenshtein distance implementation.
+   */
+  private levenshteinDistance(a: string, b: string): number {
+    const matrix: number[][] = [];
+
+    for (let i = 0; i <= b.length; i++) {
+      matrix[i] = [i];
+    }
+
+    for (let j = 0; j <= a.length; j++) {
+      matrix[0][j] = j;
+    }
+
+    for (let i = 1; i <= b.length; i++) {
+      for (let j = 1; j <= a.length; j++) {
+        if (b.charAt(i - 1) === a.charAt(j - 1)) {
+          matrix[i][j] = matrix[i - 1][j - 1];
+        } else {
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j - 1] + 1,
+            matrix[i][j - 1] + 1,
+            matrix[i - 1][j] + 1
+          );
+        }
+      }
+    }
+
+    return matrix[b.length][a.length];
+  }
+
+  /**
+   * Check if a set of argument strings are similar to each other.
+   */
+  private areArgumentsSimilar(args: string[]): boolean {
+    if (args.length < 2) return false;
+
+    for (let i = 1; i < args.length; i++) {
+      const similarity = this.calculateStringSimilarity(args[0], args[i]);
+      if (similarity < FUZZY_SIMILARITY_THRESHOLD) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Generate a helpful hint for repeated edit failures.
+   */
+  private generateEditFailureHint(filePath: string, count: number, similar: boolean): string {
+    const hints = [
+      `The replaceFileContent tool has failed ${count} times on "${filePath}".`,
+      '',
+    ];
+
+    if (similar) {
+      hints.push('You appear to be making the same mistake repeatedly.');
+      hints.push('');
+    }
+
+    hints.push('**DIAGNOSIS:** The targetContent is probably not matching the actual file.');
+    hints.push('');
+    hints.push('**SOLUTIONS (in order of preference):**');
+    hints.push('1. Use readFile to see the EXACT current content');
+    hints.push('2. Copy the exact text you want to replace, character-for-character');
+    hints.push('3. Check for whitespace differences (spaces vs tabs, trailing whitespace)');
+    hints.push('4. If the file has changed, re-read it before editing');
+    hints.push('5. Use writeFile to completely rewrite the file if edits are extensive');
+
+    if (count >= 4) {
+      hints.push('');
+      hints.push('⚠️ CRITICAL: You have failed many times. Consider asking the user for help.');
+    }
+
+    return hints.join('\n');
   }
 
   /**
@@ -559,14 +795,14 @@ export class ToolLoop {
   }
 
   /**
-   * Inject an error result into history for each pending tool call,
-   * telling the model to change strategy.
+   * Inject an ephemeral error result into history for each pending tool call.
+   * These hints guide the model without polluting the user-visible transcript.
    */
   private injectStallHint(pendingToolCalls: ToolCallState[], message: string): void {
     for (const tc of pendingToolCalls) {
       this.history.addToolResult(
         tc.toolCallId,
-        `Error: ${message}`,
+        `[ORCHESTRATOR INTERVENTION]\n\n${message}`,
         'errored'
       );
     }

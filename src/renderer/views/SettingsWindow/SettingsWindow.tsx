@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Check, Eye, EyeOff, RefreshCw } from 'lucide-react';
+import { Icon } from '../../components/ui/Icon';
 import './SettingsWindow.css';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { getOrchideAPI } from '../../utils/orchide';
@@ -102,7 +102,7 @@ export const SettingsWindow: React.FC<SettingsWindowProps> = ({ onClose }) => {
                         spellCheck={false}
                       />
                       <button className="key-toggle-btn" onClick={() => setShowNimKey(!showNimKey)}>
-                        {showNimKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                        {showNimKey ? <Icon name="eye-closed" size={14} /> : <Icon name="eye" size={14} />}
                       </button>
                     </div>
                   </div>
@@ -138,7 +138,7 @@ export const SettingsWindow: React.FC<SettingsWindowProps> = ({ onClose }) => {
                         spellCheck={false}
                       />
                       <button className="key-toggle-btn" onClick={() => setShowTavilyKey(!showTavilyKey)}>
-                        {showTavilyKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                        {showTavilyKey ? <Icon name="eye-closed" size={14} /> : <Icon name="eye" size={14} />}
                       </button>
                     </div>
                   </div>
@@ -147,7 +147,7 @@ export const SettingsWindow: React.FC<SettingsWindowProps> = ({ onClose }) => {
 
               <div className="save-row">
                 <button className={`save-btn ${saved ? 'saved' : ''}`} onClick={handleSave}>
-                  {saved ? <><Check size={14} /> Saved!</> : 'Save Settings'}
+                  {saved ? <><Icon name="pass" size={14} /> Saved!</> : 'Save Settings'}
                 </button>
               </div>
             </>
@@ -186,7 +186,7 @@ export const SettingsWindow: React.FC<SettingsWindowProps> = ({ onClose }) => {
                       disabled={!activeWorkspace || indexStatus.isIndexing}
                       onClick={() => orchide?.indexer.reindex(activeWorkspace!.path)}
                     >
-                      <RefreshCw size={14} className={indexStatus.isIndexing ? 'spin' : ''} />
+                      <Icon name="refresh" size={14} className={indexStatus.isIndexing ? 'spin' : ''} />
                       Re-index
                     </button>
                   </div>

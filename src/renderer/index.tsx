@@ -10,6 +10,7 @@
  */
 
 import './styles/global.css';
+import '@vscode/codicons/dist/codicon.css';
 import React, { useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Sidebar } from './layouts/Sidebar/Sidebar';

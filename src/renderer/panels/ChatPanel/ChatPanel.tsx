@@ -7,30 +7,7 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { useChatStore, LivePart } from '../../store/chatStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { InputBar } from '../InputBar/InputBar';
-import {
-  FileText,
-  FolderOpen,
-  Pencil,
-  Trash2,
-  CheckCircle,
-  Loader,
-  AlertCircle,
-  Globe,
-  FilePlus,
-  FileSearch,
-  Terminal,
-  Link,
-  ChevronDown,
-  ChevronRight,
-  Brain,
-  Replace,
-  Layers,
-  Send,
-  Eye,
-  PlayCircle,
-  Activity,
-  Bell,
-} from 'lucide-react';
+import { Icon } from '../../components/ui/Icon';
 import { MarkdownRenderer } from '../../components/ui/MarkdownRenderer';
 import './ChatPanel.css';
 
@@ -42,27 +19,27 @@ type TimelineGroup =
 /**
  * Unified tool configuration - single source of truth for tool metadata
  */
-const TOOL_CONFIG: Record<string, { icon: React.FC<{ size: number }>; running: string; completed: string }> = {
-  webSearch: { icon: Globe, running: 'Searching', completed: 'Searched' },
-  readFile: { icon: FileText, running: 'Reading', completed: 'Read' },
-  writeFile: { icon: Pencil, running: 'Writing', completed: 'Wrote' },
-  listDirectory: { icon: FolderOpen, running: 'Listing', completed: 'Listed' },
-  createFile: { icon: FilePlus, running: 'Creating', completed: 'Created' },
-  deleteFile: { icon: Trash2, running: 'Deleting', completed: 'Deleted' },
-  searchInFiles: { icon: FileSearch, running: 'Searching', completed: 'Searched' },
-  grepSearch: { icon: FileSearch, running: 'Searching', completed: 'Searched' },
-  globSearch: { icon: FolderOpen, running: 'Finding', completed: 'Found' },
-  runTerminalCommand: { icon: Terminal, running: 'Running', completed: 'Ran' },
-  fetchUrl: { icon: Link, running: 'Fetching', completed: 'Fetched' },
-  updateTaskProgress: { icon: CheckCircle, running: 'Updating', completed: 'Updated' },
-  createArtifact: { icon: FileText, running: 'Creating', completed: 'Created' },
-  replaceFileContent: { icon: Replace, running: 'Editing', completed: 'Edited' },
-  multiReplaceFileContent: { icon: Layers, running: 'Editing', completed: 'Edited' },
-  startTerminalCommand: { icon: PlayCircle, running: 'Starting', completed: 'Started' },
-  getCommandStatus: { icon: Activity, running: 'Checking', completed: 'Checked' },
-  sendCommandInput: { icon: Send, running: 'Sending', completed: 'Sent' },
-  taskBoundary: { icon: Eye, running: 'Setting task', completed: 'Set task' },
-  notifyUser: { icon: Bell, running: 'Notifying', completed: 'Notified' },
+const TOOL_CONFIG: Record<string, { icon: string; running: string; completed: string }> = {
+  webSearch: { icon: 'globe', running: 'Searching', completed: 'Searched' },
+  readFile: { icon: 'file', running: 'Reading', completed: 'Read' },
+  writeFile: { icon: 'edit', running: 'Writing', completed: 'Wrote' },
+  listDirectory: { icon: 'folder-opened', running: 'Listing', completed: 'Listed' },
+  createFile: { icon: 'new-file', running: 'Creating', completed: 'Created' },
+  deleteFile: { icon: 'trash', running: 'Deleting', completed: 'Deleted' },
+  searchInFiles: { icon: 'search', running: 'Searching', completed: 'Searched' },
+  grepSearch: { icon: 'search', running: 'Searching', completed: 'Searched' },
+  globSearch: { icon: 'folder-opened', running: 'Finding', completed: 'Found' },
+  runTerminalCommand: { icon: 'terminal', running: 'Running', completed: 'Ran' },
+  fetchUrl: { icon: 'link', running: 'Fetching', completed: 'Fetched' },
+  updateTaskProgress: { icon: 'pass', running: 'Updating', completed: 'Updated' },
+  createArtifact: { icon: 'file', running: 'Creating', completed: 'Created' },
+  replaceFileContent: { icon: 'replace', running: 'Editing', completed: 'Edited' },
+  multiReplaceFileContent: { icon: 'layers', running: 'Editing', completed: 'Edited' },
+  startTerminalCommand: { icon: 'play-circle', running: 'Starting', completed: 'Started' },
+  getCommandStatus: { icon: 'pulse', running: 'Checking', completed: 'Checked' },
+  sendCommandInput: { icon: 'send', running: 'Sending', completed: 'Sent' },
+  taskBoundary: { icon: 'eye', running: 'Setting task', completed: 'Set task' },
+  notifyUser: { icon: 'bell', running: 'Notifying', completed: 'Notified' },
 };
 
 const KNOWN_TOOL_NAMES = new Set(Object.keys(TOOL_CONFIG));
@@ -152,10 +129,9 @@ function stripRawToolCallArtifacts(text: string): string {
 function getToolIcon(toolName: string) {
   const config = TOOL_CONFIG[toolName];
   if (config) {
-    const IconComponent = config.icon;
-    return <IconComponent size={14} />;
+    return <Icon name={config.icon} size={14} />;
   }
-  return <FileText size={14} />;
+  return <Icon name="file" size={14} />;
 }
 
 /**
@@ -281,7 +257,7 @@ const InlineToolChip: React.FC<{ part: LivePart }> = ({ part }) => {
 
   return (
     <div className={`tool-chip ${toolCall.status}`}>
-      <span className="tool-chip-icon">{isRunning ? <Loader size={14} className="spinning" /> : icon}</span>
+      <span className="tool-chip-icon">{isRunning ? <Icon name="loading" size={14} spin className="spinning" /> : icon}</span>
       <span className="tool-chip-action">{action}</span>
 
       {fileName && (
@@ -290,10 +266,10 @@ const InlineToolChip: React.FC<{ part: LivePart }> = ({ part }) => {
 
       {details && <span className="tool-chip-details">{details}</span>}
 
-      {toolCall.status === 'completed' && <CheckCircle size={12} className="tool-chip-status" />}
+      {toolCall.status === 'completed' && <Icon name="pass" size={12} className="tool-chip-status" />}
       {isError && (
         <>
-          <AlertCircle size={12} className="tool-chip-status" />
+          <Icon name="error" size={12} className="tool-chip-status" />
           {toolCall.error && <span className="tool-chip-error">{toolCall.error}</span>}
         </>
       )}
@@ -333,9 +309,9 @@ const ThinkingBlock: React.FC<{ content: string; isLive?: boolean }> = ({ conten
   return (
     <div className={`thinking-inline ${isLive ? 'live' : 'completed'} ${isExpanded ? 'expanded' : 'collapsed'}`}>
       <button className="thinking-inline-toggle" onClick={() => setIsExpanded(!isExpanded)}>
-        <Brain size={12} className={isLive ? 'thinking-brain spinning' : 'thinking-brain'} />
+        <Icon name="lightbulb-autofix" size={12} className={isLive ? 'thinking-brain spinning' : 'thinking-brain'} />
         <span>{isLive ? 'Thinking...' : 'Thought process'}</span>
-        {isExpanded ? <ChevronDown size={12} style={{marginLeft: 'auto', opacity: 0.5}}/> : <ChevronRight size={12} style={{marginLeft: 'auto', opacity: 0.5}}/>}
+        {isExpanded ? <Icon name="chevron-down" size={12} style={{marginLeft: 'auto', opacity: 0.5}}/> : <Icon name="chevron-right" size={12} style={{marginLeft: 'auto', opacity: 0.5}}/>}
       </button>
       
       {isExpanded && (

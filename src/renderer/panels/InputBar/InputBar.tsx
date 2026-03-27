@@ -4,7 +4,7 @@
  */
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { ArrowRight, Square } from 'lucide-react';
+import { Icon } from '../../components/ui/Icon';
 import { v4 as uuidv4 } from 'uuid';
 import { useChatStore } from '../../store/chatStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
@@ -109,7 +109,7 @@ export const InputBar: React.FC = () => {
               onClick={handleStop}
               title="Stop generation"
             >
-              <Square size={14} />
+              <Icon name="debug-stop" size={14} />
             </button>
           ) : (
             <button
@@ -118,7 +118,7 @@ export const InputBar: React.FC = () => {
               title="Send (Enter)"
               disabled={!value.trim()}
             >
-              <ArrowRight size={14} />
+              <Icon name="arrow-right" size={14} />
             </button>
           )}
         </div>

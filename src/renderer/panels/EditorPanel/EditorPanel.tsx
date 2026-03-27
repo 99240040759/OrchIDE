@@ -5,7 +5,7 @@
 
 import React, { useEffect, useRef, useCallback } from 'react';
 import MonacoEditor from '@monaco-editor/react';
-import { X, ChevronLeft, ChevronRight, FileText, Download } from 'lucide-react';
+import { Icon } from '../../components/ui/Icon';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { getLanguageFromFilename } from '../../../shared/utils/languageUtils';
 import { MarkdownRenderer } from '../../components/ui/MarkdownRenderer';
@@ -142,17 +142,17 @@ export const EditorPanel: React.FC = () => {
       <div className="editor-header">
         <div className="eh-left">
           <button className="eh-icon-btn" onClick={goToPreviousFile} title="Previous file">
-            <ChevronLeft size={15} />
+            <Icon name="chevron-left" size={15} />
           </button>
           <button className="eh-icon-btn" onClick={goToNextFile} title="Next file">
-            <ChevronRight size={15} />
+            <Icon name="chevron-right" size={15} />
           </button>
         </div>
 
         <div className="eh-right">
           {activeFile && (
             <button className="eh-icon-btn" title="Download file" onClick={handleDownload}>
-              <Download size={13} />
+              <Icon name="desktop-download" size={13} />
             </button>
           )}
         </div>
@@ -168,14 +168,14 @@ export const EditorPanel: React.FC = () => {
               onClick={() => setActiveFile(file.path)}
               title={file.path}
             >
-              <FileText size={11} className="tab-file-icon" />
+              <Icon name="file" size={11} className="tab-file-icon" />
               <span className="tab-name">{file.name}</span>
               {file.isDirty && <span className="tab-dot" />}
               <button
                 className="tab-close"
                 onClick={(e) => { e.stopPropagation(); closeFile(file.path); }}
               >
-                <X size={11} />
+                <Icon name="close" size={11} />
               </button>
             </div>
           ))}

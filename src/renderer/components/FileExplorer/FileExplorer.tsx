@@ -4,10 +4,7 @@
  */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import {
-  ChevronDown, ChevronRight, Folder, FolderOpen,
-  Plus, Trash2, Edit2, FolderPlus
-} from 'lucide-react';
+import { Icon } from '../../components/ui/Icon';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { getLanguageFromFilename } from '../../../shared/utils/languageUtils';
@@ -183,7 +180,7 @@ export const FileExplorer: React.FC = () => {
         >
           <span className="file-chevron">
             {entry.isDir ? (
-              isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />
+              isOpen ? <Icon name="chevron-down" size={12} /> : <Icon name="chevron-right" size={12} />
             ) : (
               <span style={{ width: 12, display: 'inline-block' }} />
             )}
@@ -191,9 +188,9 @@ export const FileExplorer: React.FC = () => {
           <span className="file-type-icon">
             {entry.isDir ? (
               isOpen ? (
-                <FolderOpen size={13} className="icon-folder-open" />
+                <Icon name="folder-opened" size={13} className="icon-folder-open" />
               ) : (
-                <Folder size={13} className="icon-folder" />
+                <Icon name="folder" size={13} className="icon-folder" />
               )
             ) : (
               <img
@@ -246,19 +243,19 @@ export const FileExplorer: React.FC = () => {
           {contextMenu.entry.isDir && (
             <>
               <button onClick={() => handleNewFile(contextMenu.entry.path)}>
-                <Plus size={12} /> New File
+                <Icon name="add" size={12} /> New File
               </button>
               <button onClick={() => handleNewFolder(contextMenu.entry.path)}>
-                <FolderPlus size={12} /> New Folder
+                <Icon name="new-folder" size={12} /> New Folder
               </button>
               <div className="ctx-divider" />
             </>
           )}
           <button onClick={() => startRename(contextMenu.entry)}>
-            <Edit2 size={12} /> Rename
+            <Icon name="edit" size={12} /> Rename
           </button>
           <button className="danger" onClick={() => handleDelete(contextMenu.entry)}>
-            <Trash2 size={12} /> Delete
+            <Icon name="trash" size={12} /> Delete
           </button>
         </div>
       )}

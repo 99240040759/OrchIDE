@@ -1,5 +1,5 @@
 import React from 'react';
-import { PanelLeft, PanelRight, MoreHorizontal, CodeXml, Settings } from 'lucide-react';
+import { Icon } from '../../components/ui/Icon';
 import { useLayoutStore } from '../../store/layoutStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { useAgentStore } from '../../store/agentStore';
@@ -29,7 +29,7 @@ export const TitleBar: React.FC = () => {
     <div id="title-bar">
       <div className="titlebar-actions left">
         <button className="toggle-sidebar-btn" onClick={toggleLeftSidebar} title="Toggle Left Sidebar">
-          <PanelLeft size={15} opacity={isLeftSidebarOpen ? 1 : 0.5} />
+          <Icon name="layout-sidebar-left" size={15} opacity={isLeftSidebarOpen ? 1 : 0.5} />
         </button>
       </div>
 
@@ -37,13 +37,13 @@ export const TitleBar: React.FC = () => {
 
       <div className="titlebar-actions right">
         <button className="toggle-sidebar-btn icon-only" onClick={handleOpenSettings} title="Settings">
-          <Settings size={15} />
+          <Icon name="settings-gear" size={15} />
         </button>
         <button className="toggle-sidebar-btn" onClick={toggleEditor} title="Toggle Editor">
-          <CodeXml size={15} opacity={isEditorOpen ? 1 : 0.5} />
+          <Icon name="code" size={15} opacity={isEditorOpen ? 1 : 0.5} />
         </button>
         <button className="toggle-sidebar-btn" onClick={toggleRightSidebar} title="Toggle Right Sidebar">
-          <PanelRight size={15} opacity={isRightSidebarOpen ? 1 : 0.5} />
+          <Icon name="layout-sidebar-right" size={15} opacity={isRightSidebarOpen ? 1 : 0.5} />
         </button>
       </div>
     </div>

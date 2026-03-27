@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Check, Copy, AtSign } from 'lucide-react';
+import { Icon } from './Icon';
 import { renderMermaidDiagrams } from '../../utils/markdown';
 import './MarkdownRenderer.css';
 
@@ -25,7 +25,7 @@ const CopyButton: React.FC<{ text: string }> = ({ text }) => {
 
   return (
     <button className="code-action-btn" onClick={handleCopy} title="Copy Code">
-      {copied ? <Check size={13} style={{ color: '#2ea043' }} /> : <Copy size={13} />}
+      {copied ? <Icon name="pass" size={13} style={{ color: '#2ea043' }} /> : <Icon name="copy" size={13} />}
     </button>
   );
 };
@@ -71,7 +71,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
                     <span className="modern-code-language">{language.toLowerCase()}</span>
                     <div className="modern-code-actions">
                       <button className="code-action-btn" title="Append to Context">
-                        <AtSign size={13} />
+                        <Icon name="mention" size={13} />
                       </button>
                       <CopyButton text={String(children).replace(/\\n$/, '')} />
                     </div>

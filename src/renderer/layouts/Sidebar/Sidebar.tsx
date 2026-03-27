@@ -4,9 +4,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  Plus, History, ChevronDown, FolderOpen, Trash2, Settings, MessageSquare
-} from 'lucide-react';
+import { Icon } from '../../components/ui/Icon';
 import { useChatStore } from '../../store/chatStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { useAgentStore } from '../../store/agentStore';
@@ -122,13 +120,13 @@ export const Sidebar: React.FC = () => {
         {!isWorkspaceMode ? (
           <>
             <button className="new-chat-btn" onClick={startNewChat}>
-              <Plus size={14} /> Start new conversation
+              <Icon name="add" size={14} /> Start new conversation
             </button>
 
             <div className="history-link" onClick={() => setShowChatHistory(!showChatHistory)}>
-              <History size={14} />
+              <Icon name="history" size={14} />
               <span>Chat History</span>
-              <ChevronDown size={12} className={`chevron-icon ${showChatHistory ? 'open' : ''}`} />
+              <Icon name="chevron-down" size={12} className={`chevron-icon ${showChatHistory ? 'open' : ''}`} />
             </div>
 
             {showChatHistory && (
@@ -146,7 +144,7 @@ export const Sidebar: React.FC = () => {
                       <div className="item-right">
                         <span className="time">{formatTime(s.updated_at)}</span>
                         <button className="delete-btn" onClick={(e) => deleteSession(s.id, e)}>
-                          <Trash2 size={11} />
+                          <Icon name="trash" size={11} />
                         </button>
                       </div>
                     </div>
@@ -159,11 +157,11 @@ export const Sidebar: React.FC = () => {
               <div className="section-header">
                 <span>Workspaces</span>
                 <span className="action-icon" onClick={openWorkspace} title="Open Workspace Folder">
-                  <Plus size={14} />
+                  <Icon name="add" size={14} />
                 </span>
               </div>
               <div className="workspace-item section-expandable open-workspace-hint" onClick={openWorkspace}>
-                <FolderOpen size={14} className="folder-icon" />
+                <Icon name="folder-opened" size={14} className="folder-icon" />
                 <span>Open a Folder...</span>
               </div>
             </div>
@@ -172,7 +170,7 @@ export const Sidebar: React.FC = () => {
           <>
             <div className="workspace-header-section">
               <div className="workspace-active-header">
-                <FolderOpen size={14} className="folder-icon accent" />
+                <Icon name="folder-opened" size={14} className="folder-icon accent" />
                 <span className="workspace-active-name">{activeWorkspace.name}</span>
                 <button
                   className="close-workspace-btn"
@@ -183,7 +181,7 @@ export const Sidebar: React.FC = () => {
                 </button>
               </div>
               <button className="new-chat-btn workspace-new-chat" onClick={startNewChat}>
-                <Plus size={14} /> New Agentic Chat
+                <Icon name="add" size={14} /> New Agentic Chat
               </button>
             </div>
 
@@ -216,9 +214,9 @@ export const Sidebar: React.FC = () => {
           className="bottom-link"
           onClick={(e) => { e.preventDefault(); (window as any).electron?.openSettings(); }}
         >
-          <Settings size={14} /> Settings
+          <Icon name="settings-gear" size={14} /> Settings
         </a>
-        <a href="#" className="bottom-link"><MessageSquare size={14} /> Provide Feedback</a>
+        <a href="#" className="bottom-link"><Icon name="comment" size={14} /> Provide Feedback</a>
       </div>
     </div>
   );
@@ -254,7 +252,7 @@ const WorkspaceSessionList: React.FC<{
           <div className="item-right">
             <span className="time">{formatTime(s.updated_at)}</span>
             <button className="delete-btn" onClick={(e) => onDelete(s.id, e)}>
-              <Trash2 size={11} />
+              <Icon name="trash" size={11} />
             </button>
           </div>
         </div>

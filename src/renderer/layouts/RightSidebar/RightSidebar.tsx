@@ -4,10 +4,7 @@
  */
 
 import React, { useCallback } from 'react';
-import {
-  ExternalLink, Info, CheckCircle2, Circle, Loader2,
-  FileText, ListTodo, BookOpen, Map
-} from 'lucide-react';
+import { Icon } from '../../components/ui/Icon';
 import { useAgentStore } from '../../store/agentStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { useLayoutStore } from '../../store/layoutStore';
@@ -15,10 +12,10 @@ import { getOrchideAPI } from '../../utils/orchide';
 import './RightSidebar.css';
 
 const ARTIFACT_ICONS: Record<string, React.ReactNode> = {
-  Map: <Map size={14} />,
-  BookOpen: <BookOpen size={14} />,
-  ListTodo: <ListTodo size={14} />,
-  FileText: <FileText size={14} />,
+  Map: <Icon name="git-pull-request" size={14} />,
+  BookOpen: <Icon name="book" size={14} />,
+  ListTodo: <Icon name="checklist" size={14} />,
+  FileText: <Icon name="file" size={14} />,
 };
 
 const orchide = getOrchideAPI();
@@ -60,7 +57,7 @@ export const RightSidebar: React.FC = () => {
         <div className={`rs-agent-state ${agentState}`}>
           {agentState === 'generating' && (
             <>
-              <Loader2 size={13} className="spin" />
+              <Icon name="loading" size={13} spin className="spin" />
               <span>Agent working…</span>
             </>
           )}
@@ -77,7 +74,7 @@ export const RightSidebar: React.FC = () => {
       <div className="rs-section">
         <div className="rs-header">
           <span>{taskTitle || 'Progress'}</span>
-          <ExternalLink size={12} className="header-icon" />
+          <Icon name="link-external" size={12} className="header-icon" />
         </div>
         {taskItems.length === 0 ? (
           <div className="rs-empty">No active task</div>
@@ -95,9 +92,9 @@ export const RightSidebar: React.FC = () => {
                   key={item.id}
                   className={`rs-item text-muted task-item-entry depth-${Math.min(item.depth, 2)}`}
                 >
-                  {item.status === 'done' && <CheckCircle2 size={13} className="item-icon accent check" />}
-                  {item.status === 'in-progress' && <Loader2 size={13} className="item-icon accent spin" />}
-                  {item.status === 'todo' && <Circle size={13} className="item-icon" />}
+                  {item.status === 'done' && <Icon name="pass" size={13} className="item-icon accent check" />}
+                  {item.status === 'in-progress' && <Icon name="loading" spin size={13} className="item-icon accent spin" />}
+                  {item.status === 'todo' && <Icon name="circle-outline" size={13} className="item-icon" />}
                   <span className={`item-text ${item.status === 'done' ? 'done' : ''}`}>{item.text}</span>
                 </div>
               ))}
@@ -110,7 +107,7 @@ export const RightSidebar: React.FC = () => {
       <div className="rs-section">
         <div className="rs-header">
           <span>Artifacts</span>
-          <Info size={12} className="header-icon" />
+          <Icon name="info" size={12} className="header-icon" />
         </div>
         {artifacts.length === 0 ? (
           <div className="rs-empty">No artifacts yet</div>
@@ -123,7 +120,7 @@ export const RightSidebar: React.FC = () => {
               title={artifact.filePath}
             >
               <span className="artifact-icon">
-                {ARTIFACT_ICONS[artifact.icon] || <FileText size={14} />}
+                {ARTIFACT_ICONS[artifact.icon] || <Icon name="file" size={14} />}
               </span>
               <div className="artifact-info">
                 <span className="item-text bold">{artifact.name}</span>

@@ -124,9 +124,52 @@ function stripRawToolCallArtifacts(text: string): string {
 }
 
 /**
+ * Get file extension icon URL from VS Code CDN
+ */
+function getVSCodeIcon(fileName: string): string {
+  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+  const baseUrl = 'https://cdn.jsdelivr.net/gh/vscode-icons/vscode-icons@master/icons';
+
+  const iconMap: Record<string, string> = {
+    ts: 'file_type_typescript.svg',
+    tsx: 'file_type_reactts.svg',
+    js: 'file_type_js.svg',
+    jsx: 'file_type_reactjs.svg',
+    css: 'file_type_css.svg',
+    html: 'file_type_html.svg',
+    json: 'file_type_json.svg',
+    md: 'file_type_markdown.svg',
+    py: 'file_type_python.svg',
+    rs: 'file_type_rust.svg',
+    go: 'file_type_go.svg',
+    java: 'file_type_java.svg',
+    c: 'file_type_c.svg',
+    cpp: 'file_type_cpp.svg',
+    h: 'file_type_c.svg',
+    svg: 'file_type_svg.svg',
+    png: 'file_type_image.svg',
+    jpg: 'file_type_image.svg',
+    jpeg: 'file_type_image.svg',
+    gif: 'file_type_image.svg',
+    txt: 'file_type_text.svg',
+    yml: 'file_type_yaml.svg',
+    yaml: 'file_type_yaml.svg',
+    xml: 'file_type_xml.svg',
+    sh: 'file_type_shell.svg',
+    bash: 'file_type_shell.svg',
+  };
+
+  const iconFile = iconMap[ext] || 'default_file.svg';
+  return `${baseUrl}/${iconFile}`;
+}
+
+/**
  * Get icon for tool based on name - uses unified TOOL_CONFIG
  */
-function getToolIcon(toolName: string) {
+function getToolIcon(toolName: string, fileName?: string) {
+  if (fileName) {
+    return <img src={getVSCodeIcon(fileName)} alt="file-icon" className="tool-chip-file-icon" width="14" height="14" />;
+  }
   const config = TOOL_CONFIG[toolName];
   if (config) {
     return <Icon name={config.icon} size={14} />;
@@ -250,15 +293,17 @@ const InlineToolChip: React.FC<{ part: LivePart }> = ({ part }) => {
 
   const isCompleted = toolCall.status === 'completed';
   const action = getToolAction(toolCall.toolName, isCompleted);
-  const icon = getToolIcon(toolCall.toolName);
   const { fileName, details } = extractFileInfo(toolCall.toolName, toolCall.args);
+  const icon = getToolIcon(toolCall.toolName, fileName);
   const isRunning = toolCall.status === 'running';
   const isError = toolCall.status === 'error';
 
   return (
     <div className={`tool-chip ${toolCall.status}`}>
-      <span className="tool-chip-icon">{isRunning ? <Icon name="loading" size={14} spin className="spinning" /> : icon}</span>
       <span className="tool-chip-action">{action}</span>
+      <span className="tool-chip-icon">
+        {isRunning ? <Icon name="loading" size={14} spin className="spinning" /> : icon}
+      </span>
 
       {fileName && (
         <span className="tool-chip-file">{fileName}</span>
@@ -266,11 +311,9 @@ const InlineToolChip: React.FC<{ part: LivePart }> = ({ part }) => {
 
       {details && <span className="tool-chip-details">{details}</span>}
 
-      {toolCall.status === 'completed' && <Icon name="pass" size={12} className="tool-chip-status" />}
       {isError && (
         <>
-          <Icon name="error" size={12} className="tool-chip-status" />
-          {toolCall.error && <span className="tool-chip-error">{toolCall.error}</span>}
+          <span className="tool-chip-error">[Failed] {toolCall.error}</span>
         </>
       )}
     </div>
@@ -283,6 +326,7 @@ const InlineToolChip: React.FC<{ part: LivePart }> = ({ part }) => {
 const ThinkingBlock: React.FC<{ content: string; isLive?: boolean }> = ({ content, isLive }) => {
   const [isExpanded, setIsExpanded] = useState(!!isLive);
   const contentRef = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
 
   // Auto-expand when live
   useEffect(() => {
@@ -297,26 +341,41 @@ const ThinkingBlock: React.FC<{ content: string; isLive?: boolean }> = ({ conten
     }
   }, [isLive, content]);
 
-  // Auto-scroll to bottom of the thinking block when live
+  // Industry-grade auto-scroll for thinking stream via ResizeObserver
   useEffect(() => {
-    if (isLive && isExpanded && contentRef.current) {
-      contentRef.current.scrollTop = contentRef.current.scrollHeight;
-    }
-  }, [content, isLive, isExpanded]);
+    const container = contentRef.current;
+    const inner = innerRef.current;
+    if (!container || !inner || !isLive || !isExpanded) return;
+
+    const scrollToBottom = () => {
+      container.scrollTop = container.scrollHeight;
+    };
+
+    // Scroll immediately upon setup
+    requestAnimationFrame(scrollToBottom);
+
+    const observer = new ResizeObserver(() => {
+      requestAnimationFrame(scrollToBottom);
+    });
+
+    observer.observe(inner);
+    return () => observer.disconnect();
+  }, [isLive, isExpanded]);
 
   if (!content) return null;
 
   return (
     <div className={`thinking-inline ${isLive ? 'live' : 'completed'} ${isExpanded ? 'expanded' : 'collapsed'}`}>
       <button className="thinking-inline-toggle" onClick={() => setIsExpanded(!isExpanded)}>
-        <Icon name="lightbulb-autofix" size={12} className={isLive ? 'thinking-brain spinning' : 'thinking-brain'} />
         <span>{isLive ? 'Thinking...' : 'Thought process'}</span>
-        {isExpanded ? <Icon name="chevron-down" size={12} style={{marginLeft: 'auto', opacity: 0.5}}/> : <Icon name="chevron-right" size={12} style={{marginLeft: 'auto', opacity: 0.5}}/>}
+        {isExpanded ? <Icon name="chevron-down" size={14} style={{marginLeft: 'auto', opacity: 0.5}}/> : <Icon name="chevron-right" size={14} style={{marginLeft: 'auto', opacity: 0.5}}/>}
       </button>
       
       {isExpanded && (
         <div className="thinking-inline-content" ref={contentRef}>
-          <MarkdownRenderer content={content} className="thinking-text-content" />
+          <div ref={innerRef}>
+            <MarkdownRenderer content={content} className="thinking-text-content" />
+          </div>
         </div>
       )}
     </div>
@@ -440,13 +499,14 @@ const LiveStreamContent: React.FC = () => {
 
   if (!isStreaming) return null;
 
-  // If no parts yet, show shining "Thinking..." indicator
+  // If no parts yet, show a clean, muted waiting state
   if (liveParts.length === 0) {
     return (
       <div className="message-row assistant">
         <div className="message-bubble">
-          <div className="thinking-container">
-            <span className="thinking-text">Thinking...</span>
+          <div className="thinking-inline-toggle" style={{ opacity: 0.7, cursor: 'default' }}>
+            <Icon name="loading" size={14} spin />
+            <span>Thinking...</span>
           </div>
         </div>
       </div>
@@ -476,25 +536,28 @@ export const ChatPanel: React.FC = () => {
 
   const threadMessagesRef = useRef<HTMLDivElement>(null);
   const innerContentRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
+  const isProgrammaticScrollRef = useRef(false);
 
-  // Track whether user is near the bottom
+  // Track whether user manually scrolls away from bottom
   useEffect(() => {
     const container = threadMessagesRef.current;
     if (!container) return;
 
     const onScroll = () => {
+      if (isProgrammaticScrollRef.current) return;
+
       const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-      shouldAutoScrollRef.current = distanceFromBottom < 250;
+      // If user aggressively scrolled up past 150px, disable lock
+      shouldAutoScrollRef.current = distanceFromBottom <= 150;
     };
 
-    onScroll();
     container.addEventListener('scroll', onScroll, { passive: true });
     return () => container.removeEventListener('scroll', onScroll);
   }, []);
 
-  // Industry-grade auto-scroll via ResizeObserver
-  // Fires precisely when the text block logically wraps or new content is streamed natively.
+  // Industry-grade auto-scroll via ResizeObserver + EndRef Anchor
   useEffect(() => {
     const container = threadMessagesRef.current;
     const content = innerContentRef.current;
@@ -503,10 +566,19 @@ export const ChatPanel: React.FC = () => {
     const scrollToBottom = () => {
       if (!shouldAutoScrollRef.current) return;
       
+      isProgrammaticScrollRef.current = true;
+      
       const behavior: ScrollBehavior = isStreaming ? 'auto' : 'smooth';
-      container.scrollTo({
-        top: container.scrollHeight,
+      
+      // Use the bulletproof anchor natively
+      messagesEndRef.current?.scrollIntoView({
         behavior,
+        block: 'end'
+      });
+
+      // Release the programmatic scroll lock right after layout scroll
+      requestAnimationFrame(() => {
+        isProgrammaticScrollRef.current = false;
       });
     };
 
@@ -591,6 +663,7 @@ export const ChatPanel: React.FC = () => {
             ))}
 
             <LiveStreamContent />
+            <div ref={messagesEndRef} style={{ height: 1, width: '100%', flexShrink: 0 }} />
             </div>
           </div>
 

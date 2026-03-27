@@ -7,6 +7,7 @@ import { registerFileSystemIPC } from './ipc/fileSystem';
 import { registerWatcherIPC } from './ipc/watcher';
 import { registerHistoryIPC } from './ipc/history';
 import { registerAgentIPCNew, cleanupAllSessions } from './ipc/agent';
+import { registerIndexerIPC } from './ipc/indexer';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -62,6 +63,7 @@ app.on('ready', () => {
   registerWatcherIPC();
   registerHistoryIPC();
   registerAgentIPCNew();
+  registerIndexerIPC();
 
   // Settings window
   ipcMain.on('open-settings', () => {

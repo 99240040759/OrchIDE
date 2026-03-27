@@ -284,3 +284,67 @@
 .save-btn.saved { background: #2EA043; }
 
 .sc-card + .sc-card { margin-top: 8px; }
+
+.index-progress-container {
+  margin-top: 12px;
+  background: rgba(0,0,0,0.1);
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid var(--sidebar-border);
+}
+
+.index-stats {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.index-progress-bar-bg {
+  height: 4px;
+  background: var(--input-bg);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.index-progress-bar-fill {
+  height: 100%;
+  background: var(--accent-color, #007ACC);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: var(--input-bg);
+  border: 1px solid var(--input-border);
+  color: var(--text-color);
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.action-btn:hover:not(:disabled) {
+  background-color: var(--hover-bg);
+}
+
+.action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}

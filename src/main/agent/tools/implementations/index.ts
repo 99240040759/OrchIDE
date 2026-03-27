@@ -47,6 +47,13 @@ import {
   sendCommandInputImpl,
 } from './terminalTools';
 
+// AST Tools
+import {
+  astFindDefinitionImpl,
+  astDocumentSymbolsImpl,
+  astGlobalSearchImpl,
+} from './astTools';
+
 // ============================================================================
 // Complete Tool Registry
 // ============================================================================
@@ -143,6 +150,20 @@ export const ALL_TOOLS: Record<string, Tool> = {
     ...ALL_TOOL_DEFINITIONS.notifyUser,
     execute: notifyUserImpl,
   },
+
+  // AST Tools
+  astFindDefinition: {
+    ...ALL_TOOL_DEFINITIONS.astFindDefinition,
+    execute: astFindDefinitionImpl,
+  },
+  astDocumentSymbols: {
+    ...ALL_TOOL_DEFINITIONS.astDocumentSymbols,
+    execute: astDocumentSymbolsImpl,
+  },
+  astGlobalSearch: {
+    ...ALL_TOOL_DEFINITIONS.astGlobalSearch,
+    execute: astGlobalSearchImpl,
+  },
 };
 
 /**
@@ -154,6 +175,7 @@ export const TOOL_GROUPS = {
   web: ['webSearch', 'fetchUrl'],
   terminal: ['runTerminalCommand', 'startTerminalCommand', 'getCommandStatus', 'sendCommandInput'],
   agent: ['updateTaskProgress', 'createArtifact', 'taskBoundary', 'notifyUser'],
+  ast: ['astFindDefinition', 'astDocumentSymbols', 'astGlobalSearch'],
 } as const;
 
 /**
@@ -191,6 +213,8 @@ export function getToolsForPurpose(purpose: 'planning' | 'implementation' | 'res
         ALL_TOOLS.taskBoundary,
         ALL_TOOLS.notifyUser,
         ALL_TOOLS.updateTaskProgress,
+        ALL_TOOLS.astDocumentSymbols,
+        ALL_TOOLS.astGlobalSearch,
       ];
     case 'research':
       return [
@@ -202,6 +226,9 @@ export function getToolsForPurpose(purpose: 'planning' | 'implementation' | 'res
         ALL_TOOLS.webSearch,
         ALL_TOOLS.fetchUrl,
         ALL_TOOLS.taskBoundary,
+        ALL_TOOLS.astFindDefinition,
+        ALL_TOOLS.astDocumentSymbols,
+        ALL_TOOLS.astGlobalSearch,
       ];
     case 'implementation':
       return Object.values(ALL_TOOLS);

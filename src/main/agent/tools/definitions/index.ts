@@ -64,6 +64,16 @@ export {
   sendCommandInputTool,
 } from './terminalTools';
 
+// AST Tools
+export {
+  astFindDefinitionDef,
+  astFindDefinitionTool,
+  astDocumentSymbolsDef,
+  astDocumentSymbolsTool,
+  astGlobalSearchDef,
+  astGlobalSearchTool,
+} from './astTools';
+
 // ==========================================================================
 // All tool definitions map
 // ==========================================================================
@@ -73,6 +83,7 @@ import { replaceFileContentTool, multiReplaceFileContentTool } from './editTools
 import { updateTaskProgressTool, createArtifactTool, taskBoundaryTool, notifyUserTool } from './agentTools';
 import { webSearchTool, fetchUrlTool } from './webTools';
 import { runTerminalCommandTool, startTerminalCommandTool, getCommandStatusTool, sendCommandInputTool } from './terminalTools';
+import { astFindDefinitionTool, astDocumentSymbolsTool, astGlobalSearchTool } from './astTools';
 
 export const ALL_TOOL_DEFINITIONS = {
   // File operations
@@ -106,6 +117,11 @@ export const ALL_TOOL_DEFINITIONS = {
   createArtifact: createArtifactTool,
   taskBoundary: taskBoundaryTool,
   notifyUser: notifyUserTool,
+
+  // AST Tools
+  astFindDefinition: astFindDefinitionTool,
+  astDocumentSymbols: astDocumentSymbolsTool,
+  astGlobalSearch: astGlobalSearchTool,
 };
 
 export type ToolName = keyof typeof ALL_TOOL_DEFINITIONS;

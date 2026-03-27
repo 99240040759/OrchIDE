@@ -126,6 +126,9 @@ contextBridge.exposeInMainWorld('orchide', {
     stop: () =>
       ipcRenderer.invoke('watcher:stop'),
 
+    getActiveWorkspace: () =>
+      ipcRenderer.invoke('watcher:get-active'),
+
     /**
      * Subscribe to watcher events
      * Returns unsubscribe function for proper cleanup
@@ -338,5 +341,32 @@ contextBridge.exposeInMainWorld('orchide', {
 
     save: (settings: Record<string, string>) =>
       ipcRenderer.invoke('settings:save', settings),
+  },
+
+  // ==========================================================================
+  // Indexer API
+  // ==========================================================================
+  indexer: {
+    connect: (workspacePath: string) =>
+      ipcRenderer.invoke('indexer:connect', workspacePath),
+
+    reindex: (workspacePath: string) =>
+      ipcRenderer.invoke('indexer:reindex', workspacePath),
+
+    status: (workspacePath: string) =>
+      ipcRenderer.invoke('indexer:status', workspacePath),
+
+    /**
+     * Subscribe to indexing progress
+     */
+    subscribeProgress: (callback: (data: { 
+      workspacePath: string; 
+      isIndexing: boolean; 
+      progress: number; 
+      completed: number; 
+      total: number;
+    }) => void): (() => void) => {
+      return addListener('indexer:progress', callback as EventCallback);
+    },
   },
 });

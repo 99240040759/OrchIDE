@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, ChevronDown, Check, Eye, EyeOff } from 'lucide-react';
+import { X, ChevronDown, Check, Eye, EyeOff, Search, Database, RefreshCw } from 'lucide-react';
 import './SettingsWindow.css';
+import { useWorkspaceStore } from '../../store/workspaceStore';
 
 interface SettingsWindowProps {
   onClose: () => void;
@@ -14,10 +15,50 @@ export const SettingsWindow: React.FC<SettingsWindowProps> = ({ onClose }) => {
   const [saved, setSaved] = useState(false);
   const [showNimKey, setShowNimKey] = useState(false);
   const [showTavilyKey, setShowTavilyKey] = useState(false);
+  
+  // Indexer state
+  const { activeWorkspace, setWorkspace } = useWorkspaceStore();
+  const [indexStatus, setIndexStatus] = useState<{
+    isIndexing: boolean;
+    progress: number;
+    completed: number;
+    total: number;
+  }>({ isIndexing: false, progress: 0, completed: 0, total: 0 });
 
   useEffect(() => {
+    // Sync active workspace from main process if not set
+    if (!activeWorkspace) {
+      orchide?.watcher.getActiveWorkspace().then((path: string | null) => {
+        if (path) {
+          const name = path.split(/[/\\]/).pop() || 'Workspace';
+          setWorkspace({ path, name });
+        }
+      });
+    }
+
     orchide?.settings.get().then((s: Record<string, string>) => setSettings(s || {}));
-  }, []);
+    
+    if (activeWorkspace) {
+      // Connect to indexer and start listener
+      orchide?.indexer.connect(activeWorkspace.path).then((status: any) => {
+         if (status.isIndexing) {
+           setIndexStatus(prev => ({ ...prev, isIndexing: true }));
+         }
+      });
+
+      const unsub = orchide?.indexer.subscribeProgress((data: any) => {
+        if (data.workspacePath === activeWorkspace.path) {
+          setIndexStatus({
+            isIndexing: data.isIndexing,
+            progress: data.progress,
+            completed: data.completed,
+            total: data.total
+          });
+        }
+      });
+      return unsub;
+    }
+  }, [activeWorkspace, setWorkspace]);
 
   const handleSave = async () => {
     await orchide?.settings.save(settings);
@@ -36,7 +77,7 @@ export const SettingsWindow: React.FC<SettingsWindowProps> = ({ onClose }) => {
       <div className="settings-body">
         <div className="settings-sidebar">
           <div className="ss-nav">
-            {['Agent', 'Models', 'Browser', 'Notifications', 'Customizations', 'Editor'].map(item => (
+            {['Agent', 'Models', 'Browser', 'Workspace', 'Notifications', 'Customizations', 'Editor'].map(item => (
               <div key={item} className={`ss-item ${activeNav === item ? 'active' : ''}`} onClick={() => setActiveNav(item)}>{item}</div>
             ))}
             <div className="ss-divider" />
@@ -158,6 +199,57 @@ export const SettingsWindow: React.FC<SettingsWindowProps> = ({ onClose }) => {
             </>
           )}
 
+          {activeNav === 'Workspace' && (
+            <>
+              <div className="sc-section">
+                <div className="sc-section-title">SEMANTIC INDEXING</div>
+                <div className="sc-card">
+                  <div className="sc-card-info">
+                    <div className="sc-card-title">AST Semantic Cache</div>
+                    <div className="sc-card-desc">
+                      Indexing your workspace allows the agent to find definitions and symbols instantly.
+                      {activeWorkspace ? ` Currently indexing: ${activeWorkspace.name}` : ' No workspace active.'}
+                    </div>
+                    
+                    {activeWorkspace && (
+                      <div className="index-progress-container">
+                        <div className="index-stats">
+                          <span>{indexStatus.isIndexing ? 'Indexing...' : 'Idle'}</span>
+                          <span>{indexStatus.completed} / {indexStatus.total} files</span>
+                        </div>
+                        <div className="index-progress-bar-bg">
+                          <div 
+                            className="index-progress-bar-fill" 
+                            style={{ width: `${indexStatus.progress}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="sc-card-action">
+                    <button 
+                      className="action-btn" 
+                      disabled={!activeWorkspace || indexStatus.isIndexing}
+                      onClick={() => orchide?.indexer.reindex(activeWorkspace!.path)}
+                    >
+                      <RefreshCw size={14} className={indexStatus.isIndexing ? 'spin' : ''} />
+                      Re-index
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="sc-section">
+                <div className="sc-section-title">DATABASE</div>
+                <div className="sc-card">
+                  <div className="sc-card-info">
+                    <div className="sc-card-title">Storage Location</div>
+                    <div className="sc-card-desc">Indexer data is stored in the `.orch` directory within your workspace.</div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

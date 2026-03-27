@@ -6,10 +6,16 @@
 
 import { ipcMain, BrowserWindow } from 'electron';
 import chokidar, { FSWatcher } from 'chokidar';
+import { EventEmitter } from 'events';
 import { shouldIgnore } from '../../shared/utils/pathUtils';
+
+// Global event emitter for backend services (like AST Indexer) to listen to file changes
+export const watcherEvents = new EventEmitter();
+
 
 // Watcher state
 let activeWatcher: FSWatcher | null = null;
+let activeWorkspacePath: string | null = null;
 let watcherWindowId: number | null = null;
 let windowCloseHandler: (() => void) | null = null;
 
@@ -55,10 +61,16 @@ async function cleanupWatcher(): Promise<void> {
  * Register watcher IPC handlers
  */
 export function registerWatcherIPC(): void {
+  // Get active workspace path
+  ipcMain.handle('watcher:get-active', () => {
+    return activeWorkspacePath;
+  });
+
   // Start watching a workspace
   ipcMain.handle('watcher:start', async (event, workspacePath: string) => {
     // Clean up any existing watcher
     await cleanupWatcher();
+    activeWorkspacePath = workspacePath;
 
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) {
@@ -99,9 +111,9 @@ export function registerWatcherIPC(): void {
       };
 
       // Register event handlers
-      activeWatcher.on('add', (p) => sendEvent('add', p));
-      activeWatcher.on('change', (p) => sendEvent('change', p));
-      activeWatcher.on('unlink', (p) => sendEvent('unlink', p));
+      activeWatcher.on('add', (p) => { sendEvent('add', p); watcherEvents.emit('file_added', p, workspacePath); });
+      activeWatcher.on('change', (p) => { sendEvent('change', p); watcherEvents.emit('file_changed', p, workspacePath); });
+      activeWatcher.on('unlink', (p) => { sendEvent('unlink', p); watcherEvents.emit('file_deleted', p, workspacePath); });
       activeWatcher.on('addDir', (p) => sendEvent('addDir', p));
       activeWatcher.on('unlinkDir', (p) => sendEvent('unlinkDir', p));
 
@@ -110,6 +122,10 @@ export function registerWatcherIPC(): void {
       });
 
       console.log(`[Watcher] Started watching: ${workspacePath}`);
+      
+      // Industrial Grade: Notify backend services that a new workspace is being watched
+      watcherEvents.emit('watcher_started', workspacePath);
+
       return { started: true };
     } catch (err) {
       console.error('[Watcher] Failed to start:', err);
@@ -120,6 +136,7 @@ export function registerWatcherIPC(): void {
   // Stop watching
   ipcMain.handle('watcher:stop', async () => {
     await cleanupWatcher();
+    activeWorkspacePath = null;
     console.log('[Watcher] Stopped');
     return { stopped: true };
   });

@@ -21,7 +21,8 @@ import type {
   ChatMessage,
   AssistantMessage,
 } from '../agent/core/types';
-import { loadSettings } from '../appdata';
+import { loadSettings, getAppDataDir } from '../appdata';
+import * as path from 'node:path';
 import {
   createSession as dbCreateSession,
   insertMessage,
@@ -30,6 +31,7 @@ import {
   insertArtifact,
   upsertTaskProgress,
 } from '../db';
+import { getWorkspaceIndexer } from './indexer';
 
 // ============================================================================
 // Session Management
@@ -86,6 +88,11 @@ function getOrCreateSession(
     // Persist to DB
     dbCreateSession(sessionId, mode, workspacePath, workspaceName);
     console.log('[Agent IPC] Session created and stored:', sessionId);
+
+    // Boot up the indexer in the background
+    if (workspacePath) {
+      getWorkspaceIndexer(workspacePath);
+    }
   } else {
     console.log('[Agent IPC] Reusing existing session:', sessionId);
   }
@@ -156,7 +163,9 @@ export function registerAgentIPCNew(): void {
       return { error: 'Empty message', started: false };
     }
 
-    const { sessionId, message, workspacePath, workspaceName } = params;
+    const { sessionId, message } = params;
+    const workspacePath = params.workspacePath || path.join(getAppDataDir(), 'workspaces', 'global');
+    const workspaceName = params.workspaceName || 'Global Workspace';
 
     try {
       const dbMode = params.mode === 'chat' ? 'chat' : 'agentic';

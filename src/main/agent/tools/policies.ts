@@ -245,7 +245,7 @@ function isPathWithinWorkspace(filePath: string, workspacePath: string): boolean
 
 function isDangerousCommand(command: string): boolean {
   const dangerousPatterns = [
-    /\brm\s+-rf?\s+[\/~]/i,      // rm -r / or ~
+    /\brm\s+-rf?\s+[/~]/i,       // rm -r / or ~
     /\brm\s+-rf?\s+\*/i,          // rm -r *
     /\bsudo\b/i,                  // sudo
     /\bchmod\s+777/i,             // chmod 777
@@ -303,7 +303,7 @@ export function createToolApprovalRequest(
 /**
  * Format tool arguments for preview
  */
-function formatArgsPreview(args: Record<string, unknown>, maxLength: number = 100): string {
+function formatArgsPreview(args: Record<string, unknown>, maxLength = 100): string {
   const parts: string[] = [];
   
   for (const [key, value] of Object.entries(args)) {

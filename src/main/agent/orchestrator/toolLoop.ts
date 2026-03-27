@@ -19,10 +19,8 @@
 
 import type {
   AgentConfig,
-  ChatMessage,
-  ToolCall,
-  ToolCallState,
   StreamEvent,
+  ToolCallState,
 } from '../core/types';
 import type { LLMClient } from '../core/llm';
 import type { ChatHistory } from '../core/history';
@@ -53,7 +51,8 @@ const MAX_FILE_EDIT_FAILURES = 3;
 const FUZZY_SIMILARITY_THRESHOLD = 0.85;
 
 /** Max stall hints to inject before forcing break */
-const MAX_STALL_HINTS = 2;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future stall-breaker enhancement
+const _MAX_STALL_HINTS = 2;
 
 // ============================================================================
 // Types
@@ -401,7 +400,7 @@ export class ToolLoop {
    * Execute a single tool call, truncate its result using head+tail strategy,
    * and write into history. Returns true if succeeded, false if failed.
    */
-  private async executeToolCall(tc: ToolCallState, signal: AbortSignal): Promise<boolean> {
+  private async executeToolCall(tc: ToolCallState, _signal: AbortSignal): Promise<boolean> {
     const toolName = tc.toolCall.function.name;
 
     // Mark as in-flight
@@ -567,7 +566,7 @@ export class ToolLoop {
       }
     }
 
-    for (const [pattern, count] of searchPatterns) {
+    for (const [_searchPattern, count] of searchPatterns) {
       if (count >= FUZZY_DUPLICATE_THRESHOLD) {
         return {
           stalled: true,

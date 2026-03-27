@@ -107,7 +107,8 @@ const DEFAULT_KI_PRIORITY: Record<KICategory, number> = {
 };
 
 /** Files to scan for auto-discovery */
-const AUTO_DISCOVERY_FILES = [
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for auto-discovery feature
+const _AUTO_DISCOVERY_FILES = [
   'README.md',
   'package.json',
   'pyproject.toml',
@@ -132,8 +133,8 @@ export class KnowledgeItemManager {
   private kiPath: string;
   private config: KIManagerConfig;
   private cache: Map<string, KnowledgeItem> = new Map();
-  private lastScan: number = 0;
-  private scanInterval: number = 30000; // 30 seconds
+  private lastScan = 0;
+  private scanInterval = 30000; // 30 seconds
 
   constructor(config: KIManagerConfig) {
     this.workspacePath = config.workspacePath;
@@ -407,7 +408,7 @@ sessions/
    * Select KIs to inject into context based on relevance and budget.
    */
   selectForContext(
-    query: string = '',
+    query = '',
     maxTokens?: number
   ): KIContextSelection {
     const budget = maxTokens ?? this.config.maxContextTokens;

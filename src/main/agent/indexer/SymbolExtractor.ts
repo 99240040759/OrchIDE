@@ -24,9 +24,9 @@ export class SymbolExtractor {
       const name = this.extractName(node);
       if (name) {
         // Extract a sensible snippet (e.g. signature or the first few lines)
-        let endRow = node.endPosition.row;
+        const endRow = node.endPosition.row;
         // Don't store the entire class body if it's huge. Max 20 lines.
-        let snippetEnd = Math.min(node.startPosition.row + 20, endRow);
+        const snippetEnd = Math.min(node.startPosition.row + 20, endRow);
         
         const snippet = lines.slice(node.startPosition.row, snippetEnd + 1).join('\n');
 

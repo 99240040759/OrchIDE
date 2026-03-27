@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { X, ChevronDown, Check, Eye, EyeOff, Search, Database, RefreshCw } from 'lucide-react';
+import { X, ChevronDown, Check, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import './SettingsWindow.css';
 import { useWorkspaceStore } from '../../store/workspaceStore';
+import { getOrchideAPI } from '../../utils/orchide';
 
 interface SettingsWindowProps {
   onClose: () => void;
 }
 
-const orchide = (window as any).orchide;
+const orchide = getOrchideAPI();
 
 export const SettingsWindow: React.FC<SettingsWindowProps> = ({ onClose }) => {
   const [activeNav, setActiveNav] = useState('Models');

@@ -29,7 +29,6 @@ import {
   Eye,
   PlayCircle,
   Activity,
-  Flag,
   Bell,
 } from 'lucide-react';
 import { MarkdownRenderer } from '../../components/ui/MarkdownRenderer';
@@ -497,8 +496,6 @@ const LiveStreamContent: React.FC = () => {
 export const ChatPanel: React.FC = () => {
   const messages = useChatStore((state) => state.messages);
   const isStreaming = useChatStore((state) => state.isStreaming);
-  const liveParts = useChatStore((state) => state.liveParts);
-  const streamingContent = useChatStore((state) => state.streamingContent);
   const activeWorkspace = useWorkspaceStore((state) => state.activeWorkspace);
 
   const threadMessagesRef = useRef<HTMLDivElement>(null);

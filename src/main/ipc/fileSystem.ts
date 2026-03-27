@@ -7,8 +7,6 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { FileEntry } from '../../shared/types';
-import { shouldIgnore } from '../../shared/utils/pathUtils';
 import { buildFileTree } from '../../shared/utils/fileUtils';
 
 /**

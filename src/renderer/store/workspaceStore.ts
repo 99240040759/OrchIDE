@@ -5,9 +5,15 @@
 
 import { create } from 'zustand';
 import type { FileEntry, OpenFile, AgentMode } from '../../shared/types';
+import type { OrchideAPI } from '../../types/electron.d';
 
 // Re-export types for convenience
 export type { FileEntry, OpenFile };
+
+// Type-safe window accessor
+function getOrchideAPI(): OrchideAPI | undefined {
+  return (window as Window & { orchide?: OrchideAPI }).orchide;
+}
 
 interface WorkspaceState {
   // Active workspace
@@ -58,7 +64,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     if (!ws) return;
 
     try {
-      const orchide = (window as any).orchide;
+      const orchide = getOrchideAPI();
       if (!orchide) return;
 
       const result = await orchide.fs.listDir(ws.path);

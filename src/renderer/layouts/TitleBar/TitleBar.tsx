@@ -15,8 +15,9 @@ export const TitleBar: React.FC = () => {
   const { taskTitle } = useAgentStore();
 
   const handleOpenSettings = () => {
-    if ((window as any).electron?.openSettings) {
-      (window as any).electron.openSettings();
+    const electron = (window as { electron?: { openSettings?: () => void } }).electron;
+    if (electron?.openSettings) {
+      electron.openSettings();
     }
   };
 

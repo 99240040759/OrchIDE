@@ -9,9 +9,10 @@ import { X, ChevronLeft, ChevronRight, FileText, Download } from 'lucide-react';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { getLanguageFromFilename } from '../../../shared/utils/languageUtils';
 import { MarkdownRenderer } from '../../components/ui/MarkdownRenderer';
+import { getOrchideAPI } from '../../utils/orchide';
 import './EditorPanel.css';
 
-const orchide = (window as any).orchide;
+const orchide = getOrchideAPI();
 
 const AUTOSAVE_DELAY = 700;
 

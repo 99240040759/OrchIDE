@@ -8,21 +8,16 @@
 import { v4 as uuidv4 } from 'uuid';
 import type {
   ChatMessage,
-  ChatHistoryItem,
   ChatHistoryItemWithId,
   ToolCall,
   ToolCallState,
   ToolCallStatus,
   ContextItem,
   AssistantMessage,
-  ToolMessage,
-  UserMessage,
-  SystemMessage,
   Usage,
 } from './types';
 import {
   countMessagesTokens,
-  truncateMessages,
   summarizeForCompaction,
 } from './tokens';
 
@@ -118,7 +113,7 @@ export class ChatHistory {
   addAssistantMessage(
     content: string | null,
     toolCalls?: ToolCall[],
-    usage?: Usage
+    _usage?: Usage
   ): ChatHistoryItemWithId {
     const message: AssistantMessage & { id: string } = {
       id: uuidv4(),

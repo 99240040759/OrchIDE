@@ -309,7 +309,7 @@ function rescueJson(args: string): Record<string, unknown> {
  * which crashes some downstream APIs (e.g. NVIDIA NIM / Llama jinja templating).
  */
 export function parseToolCallArgs(toolCall: ToolCall): Record<string, unknown> {
-  let args = toolCall.function.arguments;
+  const args = toolCall.function.arguments;
   if (!args || args.trim() === '') {
     toolCall.function.arguments = '{}';
     return {};

@@ -56,7 +56,7 @@ export async function startCommand(
   command: string,
   cwd: string,
   signal?: AbortSignal,
-  waitMs: number = 0
+  waitMs = 0
 ): Promise<{ commandId: string; initialOutput: string; status: CommandStatus }> {
   const id = `cmd_${uuidv4().slice(0, 8)}`;
 
@@ -155,8 +155,8 @@ export async function startCommand(
  */
 export async function getStatus(
   commandId: string,
-  outputCharCount: number = 10000,
-  waitSeconds: number = 0
+  outputCharCount = 10000,
+  waitSeconds = 0
 ): Promise<CommandStatusResult | null> {
   const entry = commands.get(commandId);
   if (!entry) return null;

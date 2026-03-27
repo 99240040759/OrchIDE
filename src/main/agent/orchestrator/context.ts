@@ -14,12 +14,6 @@
 import type { AgentConfig, ChatMessage } from '../core/types';
 import type { ChatHistory } from '../core/history';
 import { estimateTokens } from '../core/tokens';
-import {
-  truncateHeadTail,
-  truncateToolResult,
-  truncateWithReport,
-  type TruncationConfig,
-} from './truncation';
 import type { KnowledgeItemManager, KIContextSelection } from './knowledgeItems';
 
 // ============================================================================
@@ -88,7 +82,8 @@ const PRIORITY_WEIGHTS = {
 const PROTECTED_RECENT_COUNT = 6;
 
 /** Minimum messages to keep after compaction */
-const MIN_MESSAGES_AFTER_COMPACTION = 4;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for compaction enhancement
+const _MIN_MESSAGES_AFTER_COMPACTION = 4;
 
 // ============================================================================
 // Context Manager Class
@@ -135,7 +130,7 @@ export class ContextManager {
    * Get KI content to inject into context.
    * Call this when building the system prompt.
    */
-  getKIContent(query: string = ''): string {
+  getKIContent(query = ''): string {
     if (!this.kiManager) return '';
 
     // Reserve tokens for KIs (about 20% of context)
@@ -294,7 +289,7 @@ export class ContextManager {
           }
           break;
 
-        case 'tool':
+        case 'tool': {
           // Tool results — check if error or success
           const content = typeof msg.content === 'string' ? msg.content.toLowerCase() : '';
           const isError =
@@ -308,6 +303,7 @@ export class ContextManager {
             isProtected = true;
           }
           break;
+        }
       }
 
       result.push({

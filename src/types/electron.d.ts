@@ -5,7 +5,6 @@
 
 import type {
   FileEntry,
-  FileOperationResult,
   WatcherEvent,
   AgentRunParams,
   Message,
@@ -136,15 +135,43 @@ export interface OrchideSettingsAPI {
 }
 
 // ============================================================================
+// OrchIDE Indexer API
+// ============================================================================
+
+export interface IndexerProgress {
+  workspacePath: string;
+  isIndexing: boolean;
+  progress: number;
+  completed: number;
+  total: number;
+}
+
+export interface IndexerStatus {
+  isIndexing: boolean;
+  workspacePath?: string;
+}
+
+export interface OrchideIndexerAPI {
+  connect: (workspacePath: string) => Promise<IndexerStatus>;
+  start: (workspacePath: string) => Promise<{ success: boolean; error?: string }>;
+  stop: () => Promise<{ success: boolean }>;
+  reindex: (workspacePath: string) => Promise<{ success: boolean; error?: string }>;
+  query: (query: string) => Promise<unknown[]>;
+  getStatus: () => Promise<IndexerStatus>;
+  subscribeProgress: (callback: (data: IndexerProgress) => void) => () => void;
+}
+
+// ============================================================================
 // Combined OrchIDE API
 // ============================================================================
 
 export interface OrchideAPI {
   fs: OrchideFileSystemAPI;
-  watcher: OrchideWatcherAPI;
+  watcher: OrchideWatcherAPI & { getActiveWorkspace?: () => Promise<string | null> };
   agent: OrchideAgentAPI;
   history: OrchideHistoryAPI;
   settings: OrchideSettingsAPI;
+  indexer?: OrchideIndexerAPI;
 }
 
 // ============================================================================

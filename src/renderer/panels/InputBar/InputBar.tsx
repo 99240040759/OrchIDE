@@ -8,10 +8,10 @@ import { ArrowRight, Square, Globe, Cpu } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { useChatStore } from '../../store/chatStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
-import { useAgentStore } from '../../store/agentStore';
+import { getOrchideAPI } from '../../utils/orchide';
 import './InputBar.css';
 
-const orchide = (window as any).orchide;
+const orchide = getOrchideAPI();
 
 export const InputBar: React.FC = () => {
   const [value, setValue] = useState('');

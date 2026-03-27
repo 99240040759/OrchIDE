@@ -23,12 +23,13 @@ import { useChatStore } from './store/chatStore';
 import { useAgentStore } from './store/agentStore';
 import { useWorkspaceStore } from './store/workspaceStore';
 import { v4 as uuidv4 } from 'uuid';
+import { getOrchideAPI } from './utils/orchide';
 
 // Set platform class on body for platform-specific styling
-const platform = (window as any).electron?.platform || 'unknown';
+const platform = (window as { electron?: { platform?: string } }).electron?.platform || 'unknown';
 document.body.classList.add(`platform-${platform}`);
 
-const orchide = (window as any).orchide;
+const orchide = getOrchideAPI();
 
 /**
  * Main application component
@@ -80,6 +81,7 @@ const App: React.FC = () => {
 
       // ---- Stream chunk (legacy compatibility) --------------------------------
       // We ignore this to prevent double-printing since onStreamEvent handles text-deltas
+      // eslint-disable-next-line @typescript-eslint/no-empty-function
       onStreamChunk: () => {},
 
       // ---- Stream fully finished ---------------------------------------------

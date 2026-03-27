@@ -18,7 +18,6 @@ import { AgentSession, type AgentSessionConfig } from '../agent/orchestrator';
 import type {
   StreamEvent,
   AgentEvent,
-  ChatMessage,
   AssistantMessage,
 } from '../agent/core/types';
 import { loadSettings, getAppDataDir } from '../appdata';
@@ -114,7 +113,7 @@ function removeSession(sessionId: string): void {
 /** Clean up all active sessions (called on app shutdown). */
 export function cleanupAllSessions(): void {
   console.log(`[Agent IPC] Cleaning up ${activeSessions.size} active sessions`);
-  for (const [sessionId, session] of activeSessions) {
+  for (const [_sessionId, session] of activeSessions) {
     try {
       session.abort();
     } catch {

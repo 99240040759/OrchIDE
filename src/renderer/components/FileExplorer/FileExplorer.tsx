@@ -12,9 +12,10 @@ import { useWorkspaceStore } from '../../store/workspaceStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { getLanguageFromFilename } from '../../../shared/utils/languageUtils';
 import type { FileEntry } from '../../../shared/types';
+import { getOrchideAPI } from '../../utils/orchide';
 import './FileExplorer.css';
 
-const orchide = (window as any).orchide;
+const orchide = getOrchideAPI();
 
 /**
  * Get file extension icon URL from VS Code CDN

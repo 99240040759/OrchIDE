@@ -99,8 +99,8 @@ export async function existsAsync(targetPath: string): Promise<boolean> {
  */
 export async function buildFileTree(
   dirPath: string,
-  maxDepth: number = 6,
-  currentDepth: number = 0
+  maxDepth = 6,
+  currentDepth = 0
 ): Promise<FileEntry[]> {
   if (currentDepth >= maxDepth) return [];
 
@@ -168,7 +168,7 @@ export async function searchInFiles(
   workspacePath: string,
   pattern: string,
   fileExtensions?: string[],
-  maxResults: number = 100
+  maxResults = 100
 ): Promise<{ filePath: string; lineNumber: number; line: string }[]> {
   const matches: { filePath: string; lineNumber: number; line: string }[] = [];
 

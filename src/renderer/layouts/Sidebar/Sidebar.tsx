@@ -14,10 +14,11 @@ import { useAgentStore } from '../../store/agentStore';
 import { v4 as uuidv4 } from 'uuid';
 import { FileExplorer } from '../../components/FileExplorer/FileExplorer';
 import { getFilename } from '../../../shared/utils/pathUtils';
-import type { SessionItem } from '../../../shared/types';
+import { getOrchideAPI } from '../../utils/orchide';
+import type { Session } from '../../../types/electron.d';
 import './Sidebar.css';
 
-const orchide = (window as any).orchide;
+const orchide = getOrchideAPI();
 
 export const Sidebar: React.FC = () => {
   const setSessionId = useChatStore(state => state.setSessionId);
@@ -28,10 +29,8 @@ export const Sidebar: React.FC = () => {
   const setWorkspace = useWorkspaceStore(state => state.setWorkspace);
 
   const clearForSession = useAgentStore(state => state.clearForSession);
-  const setArtifacts = useAgentStore(state => state.setArtifacts);
-  const updateTaskMd = useAgentStore(state => state.updateTaskMd);
 
-  const [chatSessions, setChatSessions] = useState<SessionItem[]>([]);
+  const [chatSessions, setChatSessions] = useState<Session[]>([]);
   const [showChatHistory, setShowChatHistory] = useState(false);
 
   // Load chat history on mount
@@ -149,7 +148,7 @@ export const Sidebar: React.FC = () => {
                     >
                       <span className="title">{s.title || 'Untitled'}</span>
                       <div className="item-right">
-                        <span className="time">{formatTime(s.updatedAt)}</span>
+                        <span className="time">{formatTime(s.updated_at)}</span>
                         <button className="delete-btn" onClick={(e) => deleteSession(s.id, e)}>
                           <Trash2 size={11} />
                         </button>
@@ -254,11 +253,11 @@ const WorkspaceSessionList: React.FC<{
   onDelete: (id: string, e: React.MouseEvent) => void;
   formatTime: (ts: number) => string;
 }> = ({ workspacePath, currentSessionId, onSelect, onDelete, formatTime }) => {
-  const [sessions, setSessions] = useState<SessionItem[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
 
   useEffect(() => {
     if (!orchide || !workspacePath) return;
-    orchide.history.getWorkspaceSessions(workspacePath).then((s: SessionItem[]) => setSessions(s || []));
+    orchide.history.getWorkspaceSessions(workspacePath).then((s) => setSessions(s || []));
   }, [workspacePath, currentSessionId]);
 
   if (sessions.length === 0) {
@@ -275,7 +274,7 @@ const WorkspaceSessionList: React.FC<{
         >
           <span className="title">{s.title || 'Untitled'}</span>
           <div className="item-right">
-            <span className="time">{formatTime(s.updatedAt)}</span>
+            <span className="time">{formatTime(s.updated_at)}</span>
             <button className="delete-btn" onClick={(e) => onDelete(s.id, e)}>
               <Trash2 size={11} />
             </button>

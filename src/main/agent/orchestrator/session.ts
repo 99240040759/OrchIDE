@@ -12,8 +12,6 @@ import type {
   Session,
   SessionMode,
   Plan,
-  PlanStatus,
-  ToolCall,
   ToolCallState,
   StreamEvent,
   AgentEvent,
@@ -23,12 +21,11 @@ import { LLMClient, type LLMConfig } from '../core/llm';
 import { ChatHistory } from '../core/history';
 import { ToolRegistry } from '../tools/registry';
 import { ALL_TOOLS } from '../tools/implementations';
-import type { ToolContext, ToolResult } from '../tools/types';
+import type { ToolContext } from '../tools/types';
 import { ToolLoop } from './toolLoop';
 import { ContextManager } from './context';
 import { buildSystemPrompt } from './systemPrompt';
-import { getSessionDir } from '../../appdata';
-import { loadSettings } from '../../appdata';
+import { getSessionDir, loadSettings } from '../../appdata';
 import { KnowledgeItemManager } from './knowledgeItems';
 import { ModeEnforcer, type AgentMode, type ToolPermissionResult } from './modeEnforcement';
 
@@ -410,7 +407,7 @@ export class AgentSession extends EventEmitter {
   /**
    * Set the agent mode (planning, execution, verification)
    */
-  setMode(mode: AgentMode, reason: string = 'User request'): void {
+  setMode(mode: AgentMode, reason = 'User request'): void {
     this.modeEnforcer.transitionTo(mode, reason);
     this.emit('agent_event', {
       type: 'mode_changed',

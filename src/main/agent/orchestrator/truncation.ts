@@ -265,7 +265,7 @@ export function truncateBatch(
  * Truncate JSON output while preserving structure validity.
  * Attempts to keep the JSON parseable after truncation.
  */
-export function truncateJSON(jsonStr: string, maxChars: number = 4000): string {
+export function truncateJSON(jsonStr: string, maxChars = 4000): string {
   if (jsonStr.length <= maxChars) {
     return jsonStr;
   }
@@ -442,7 +442,7 @@ function extractErrorLines(lines: string[]): string[] {
  * Truncate a git diff while preserving hunk structure.
  * Keeps file headers and hunk markers intact.
  */
-export function truncateDiff(diff: string, maxChars: number = 6000): string {
+export function truncateDiff(diff: string, maxChars = 6000): string {
   if (diff.length <= maxChars) {
     return diff;
   }

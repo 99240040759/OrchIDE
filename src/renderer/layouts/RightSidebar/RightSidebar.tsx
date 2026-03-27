@@ -11,8 +11,7 @@ import {
 import { useAgentStore } from '../../store/agentStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { useLayoutStore } from '../../store/layoutStore';
-import { getLanguageFromFilename } from '../../../shared/utils/languageUtils';
-import { getFilename } from '../../../shared/utils/pathUtils';
+import { getOrchideAPI } from '../../utils/orchide';
 import './RightSidebar.css';
 
 const ARTIFACT_ICONS: Record<string, React.ReactNode> = {
@@ -22,7 +21,7 @@ const ARTIFACT_ICONS: Record<string, React.ReactNode> = {
   FileText: <FileText size={14} />,
 };
 
-const orchide = (window as any).orchide;
+const orchide = getOrchideAPI();
 
 export const RightSidebar: React.FC = () => {
   const taskTitle = useAgentStore(state => state.taskTitle);

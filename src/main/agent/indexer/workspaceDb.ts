@@ -124,7 +124,7 @@ export class WorkspaceDb {
     return this.db.prepare('SELECT * FROM symbols WHERE filepath = ? ORDER BY line_start ASC').all(filepath) as SymbolRow[];
   }
 
-  public searchSymbols(query: string, limit: number = 20): SymbolRow[] {
+  public searchSymbols(query: string, limit = 20): SymbolRow[] {
     // Prefix case-insensitive search with SQL LIKE
     return this.db.prepare('SELECT * FROM symbols WHERE name LIKE ? ORDER BY length(name) ASC LIMIT ?').all(`${query}%`, limit) as SymbolRow[];
   }

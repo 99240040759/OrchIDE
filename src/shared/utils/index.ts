@@ -6,14 +6,13 @@
  * when needed in the main process
  */
 
-export * from './languageUtils';
+export { getLanguageFromFilename, isTextFile, getExtension } from './languageUtils';
 export { 
   getFilename, 
   getDirname, 
   isAbsolutePath, 
   joinPath, 
   shouldIgnore,
-  getExtension 
 } from './pathUtils';
 
 // fileUtils is NOT exported here as it uses Node.js fs module

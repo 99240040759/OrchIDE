@@ -10,9 +10,7 @@ import type {
   ToolCall,
   ToolPolicy,
   ToolSettings,
-  ToolParameters,
   ToolParameterProperty,
-  AgentConfig,
 } from '../core/types';
 import type {
   Tool,

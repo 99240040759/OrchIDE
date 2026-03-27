@@ -232,72 +232,26 @@ export class ContextManager {
 
   /**
    * Stage 1: Truncate large tool results using head+tail strategy.
+   * Note: This is now handled at tool execution time by toolLoop.ts
+   * This method is kept for any tool results that slip through.
    */
   private async truncateLargeToolResults(): Promise<void> {
-    const messages = this.history.toMessages();
-    let modified = false;
-
-    for (let i = 0; i < messages.length; i++) {
-      const msg = messages[i];
-
-      // Only process tool result messages
-      if (msg.role !== 'tool') continue;
-
-      const content = typeof msg.content === 'string' ? msg.content : '';
-      if (content.length < 2000) continue; // Small enough, skip
-
-      // Apply head+tail truncation
-      const truncated = truncateToolResult(content);
-
-      if (truncated.length < content.length) {
-        // Update in history
-        this.history.updateToolResultContent(i, truncated);
-        modified = true;
-
-        console.log(
-          `[ContextManager] Truncated tool result ${i}: ${content.length} → ${truncated.length} chars`
-        );
-      }
-    }
-
-    if (modified) {
-      console.log('[ContextManager] Stage 1: Truncated large tool results');
-    }
+    // Tool result truncation is now handled in toolLoop.ts at execution time
+    // This stage is a no-op but kept for the multi-stage flow
+    console.log('[ContextManager] Stage 1: Tool results already truncated at execution time');
   }
 
   /**
    * Stage 2: Drop low-priority messages while preserving essential ones.
+   * Uses the built-in ChatHistory.compact() method instead of manual removal.
    */
   private async dropLowPriorityMessages(targetTokens: number): Promise<void> {
-    const messages = this.history.toMessages();
-
-    // Score all messages by priority
-    const scored = this.scoreMessagesByPriority(messages);
-
-    // Sort by priority (lowest first — these get dropped first)
-    scored.sort((a, b) => a.priority - b.priority);
-
-    // Identify messages to drop
-    const toDrop: number[] = [];
-    let projectedTokens = this.estimateTotalTokens(messages);
-
-    for (const item of scored) {
-      if (projectedTokens <= targetTokens) break;
-      if (item.isProtected) continue;
-
-      toDrop.push(item.index);
-      projectedTokens -= item.tokens;
+    // Use built-in compact method which handles summarization
+    const compactResult = this.history.compact(targetTokens);
+    
+    if (compactResult.compacted) {
+      console.log(`[ContextManager] Stage 2: Compacted ${compactResult.removedCount} messages`);
     }
-
-    if (toDrop.length === 0) return;
-
-    // Drop messages (from highest index to lowest to avoid index shifting)
-    toDrop.sort((a, b) => b - a);
-    for (const idx of toDrop) {
-      this.history.removeMessageAt(idx);
-    }
-
-    console.log(`[ContextManager] Stage 2: Dropped ${toDrop.length} low-priority messages`);
   }
 
   /**
@@ -370,36 +324,21 @@ export class ContextManager {
 
   /**
    * Stage 3: Aggressive compaction with summary generation.
+   * Uses the built-in ChatHistory.compact() for final aggressive trimming.
    */
   private async aggressiveCompaction(
     targetTokens: number,
     result: CompactionResult
   ): Promise<void> {
-    const messages = this.history.toMessages();
-
-    // Find the cutoff point — keep system + last N messages
-    const systemIdx = messages.findIndex((m) => m.role === 'system');
-    const keepCount = Math.max(MIN_MESSAGES_AFTER_COMPACTION, PROTECTED_RECENT_COUNT);
-    const cutoffIdx = Math.max(systemIdx + 1, messages.length - keepCount);
-
-    // Messages to summarize
-    const toSummarize = messages.slice(systemIdx + 1, cutoffIdx);
-
-    if (toSummarize.length < 2) {
-      // Nothing to summarize
-      return;
+    // Use aggressive built-in compaction
+    const compactResult = this.history.compact(targetTokens);
+    
+    if (compactResult.compacted) {
+      result.summaryCreated = true;
+      console.log(
+        `[ContextManager] Stage 3: Aggressive compaction removed ${compactResult.removedCount} messages`
+      );
     }
-
-    // Create summary
-    const summary = this.createExtractSummary(toSummarize);
-    result.summaryCreated = true;
-
-    // Apply compaction to history
-    this.history.compactWithSummary(summary, cutoffIdx);
-
-    console.log(
-      `[ContextManager] Stage 3: Created summary of ${toSummarize.length} messages, kept last ${keepCount}`
-    );
   }
 
   /**

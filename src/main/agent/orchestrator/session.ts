@@ -111,7 +111,7 @@ export class AgentSession extends EventEmitter {
     const sessionDir = getSessionDir(this.sessionId);
     
     // Load knowledge items for context injection (sync for now, will be empty on first load)
-    const kiContext = this.kiManager.selectForContext(6000).items
+    const kiContext = this.kiManager.selectForContext('', 6000).items
       .map(ki => `### ${ki.name}\n${ki.content}`)
       .join('\n\n');
     

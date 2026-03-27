@@ -239,14 +239,6 @@
   margin-left: 4px;
 }
 
-.spinning {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
 
 /* ============================================
    MARKDOWN STYLES
@@ -349,14 +341,7 @@
   border-left-color: rgba(168, 130, 255, 0.5);
 }
 
-.thinking-inline-content::-webkit-scrollbar {
-  width: 4px;
-}
 
-.thinking-inline-content::-webkit-scrollbar-thumb {
-  background: var(--hover-bg);
-  border-radius: 4px;
-}
 
 .thinking-text-content {
   font-size: 13px;

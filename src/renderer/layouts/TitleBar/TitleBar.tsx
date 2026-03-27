@@ -28,8 +28,8 @@ export const TitleBar: React.FC = () => {
   return (
     <div id="title-bar">
       <div className="titlebar-actions left">
-        <button className="toggle-sidebar-btn" onClick={toggleLeftSidebar} title="Toggle Left Sidebar">
-          <Icon name="layout-sidebar-left" size={15} opacity={isLeftSidebarOpen ? 1 : 0.5} />
+        <button className={`toggle-sidebar-btn ${isLeftSidebarOpen ? 'active' : ''}`} onClick={toggleLeftSidebar} title="Toggle Left Sidebar">
+          <Icon name="layout-sidebar-left" size={16} />
         </button>
       </div>
 
@@ -37,13 +37,13 @@ export const TitleBar: React.FC = () => {
 
       <div className="titlebar-actions right">
         <button className="toggle-sidebar-btn icon-only" onClick={handleOpenSettings} title="Settings">
-          <Icon name="settings-gear" size={15} />
+          <Icon name="settings-gear" size={16} />
         </button>
-        <button className="toggle-sidebar-btn" onClick={toggleEditor} title="Toggle Editor">
-          <Icon name="code" size={15} opacity={isEditorOpen ? 1 : 0.5} />
+        <button className={`toggle-sidebar-btn ${isEditorOpen ? 'active' : ''}`} onClick={toggleEditor} title="Toggle Editor">
+          <Icon name="code" size={16} />
         </button>
-        <button className="toggle-sidebar-btn" onClick={toggleRightSidebar} title="Toggle Right Sidebar">
-          <Icon name="layout-sidebar-right" size={15} opacity={isRightSidebarOpen ? 1 : 0.5} />
+        <button className={`toggle-sidebar-btn ${isRightSidebarOpen ? 'active' : ''}`} onClick={toggleRightSidebar} title="Toggle Right Sidebar">
+          <Icon name="layout-sidebar-right" size={16} />
         </button>
       </div>
     </div>

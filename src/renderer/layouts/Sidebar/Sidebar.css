@@ -15,13 +15,7 @@
   overflow-x: hidden;
 }
 
-.sidebar-top::-webkit-scrollbar {
-  width: 4px;
-}
-.sidebar-top::-webkit-scrollbar-thumb {
-  background-color: var(--hover-bg);
-  border-radius: 4px;
-}
+
 
 .sidebar-bottom {
   padding-top: 8px;

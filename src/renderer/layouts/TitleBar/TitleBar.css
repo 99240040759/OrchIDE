@@ -64,6 +64,10 @@
   background-color: rgba(255,255,255,0.05);
 }
 
+.toggle-sidebar-btn.active {
+  color: #ffffff; /* Bright crisp white when the panel is open */
+}
+
 /* macOS: Traffic lights are top-left. Standard offset is ~72px */
 .platform-darwin .titlebar-actions.left {
   padding-left: 72px;

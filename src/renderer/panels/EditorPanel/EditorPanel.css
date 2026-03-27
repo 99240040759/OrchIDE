@@ -135,14 +135,7 @@
   margin: 0 auto;
 }
 
-.editor-markdown-preview::-webkit-scrollbar {
-  width: 8px;
-}
 
-.editor-markdown-preview::-webkit-scrollbar-thumb {
-  background: var(--hover-bg);
-  border-radius: 8px;
-}
 
 .editor-empty {
   display: flex;

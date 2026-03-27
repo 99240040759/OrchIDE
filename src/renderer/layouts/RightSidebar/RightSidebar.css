@@ -9,13 +9,7 @@
   overflow-y: auto;
   gap: 0;
 }
-.right-sidebar-container::-webkit-scrollbar {
-  width: 4px;
-}
-.right-sidebar-container::-webkit-scrollbar-thumb {
-  background: var(--hover-bg);
-  border-radius: 4px;
-}
+
 
 .rs-section {
   margin-bottom: 24px;
@@ -105,12 +99,7 @@
 .item-icon.accent { color: var(--accent-color); opacity: 1; }
 .item-icon.check { color: #2EA043; opacity: 1; }
 .item-icon.spin {
-  animation: spin 1.2s linear infinite;
   color: var(--accent-color);
-}
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
 }
 
 .item-text {

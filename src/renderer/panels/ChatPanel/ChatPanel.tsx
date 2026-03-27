@@ -570,16 +570,6 @@ export const ChatPanel: React.FC = () => {
               </p>
             )}
             <InputBar />
-            <div className="footer-links">
-              {!activeWorkspace && <span className="footer-chip">Web Search</span>}
-              {activeWorkspace && (
-                <>
-                  <span className="footer-chip">File Operations</span>
-                  <span className="footer-chip">Web Search</span>
-                  <span className="footer-chip">Task Tracking</span>
-                </>
-              )}
-            </div>
           </div>
         </div>
       ) : (

@@ -5,8 +5,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Plus, History, ChevronDown, Info, BookOpen,
-  Globe, Settings, MessageSquare, FolderOpen, Trash2
+  Plus, History, ChevronDown, FolderOpen, Trash2, Settings, MessageSquare
 } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
@@ -93,9 +92,6 @@ export const Sidebar: React.FC = () => {
       timestamp: m.timestamp,
     }));
     setMessages(mapped);
-
-    // Note: Agent state (tasks, artifacts, files) is automatically restored 
-    // by the global useEffect in index.tsx listening to sessionId changes.
   }, [setSessionId, clearForSession, setMessages]);
 
   const deleteSession = useCallback(async (sessId: string, e: React.MouseEvent) => {
@@ -171,20 +167,9 @@ export const Sidebar: React.FC = () => {
                 <span>Open a Folder...</span>
               </div>
             </div>
-
-            <div className="section">
-              <div className="section-header">
-                <span className="playground-header">
-                  Playground <span className="info-icon"><Info size={12} /></span>
-                </span>
-                <span className="action-icon"><Plus size={14} /></span>
-              </div>
-              <div className="empty-state">No chats yet</div>
-            </div>
           </>
         ) : (
           <>
-            {/* Workspace mode header */}
             <div className="workspace-header-section">
               <div className="workspace-active-header">
                 <FolderOpen size={14} className="folder-icon accent" />
@@ -202,7 +187,6 @@ export const Sidebar: React.FC = () => {
               </button>
             </div>
 
-            {/* File Explorer */}
             <div className="file-explorer-section">
               <div className="section-header">
                 <span>Explorer</span>
@@ -210,7 +194,6 @@ export const Sidebar: React.FC = () => {
               <FileExplorer />
             </div>
 
-            {/* Workspace Chat History */}
             <div className="section workspace-history-section">
               <div className="section-header">
                 <span>Workspace History</span>
@@ -228,8 +211,6 @@ export const Sidebar: React.FC = () => {
       </div>
 
       <div className="sidebar-bottom">
-        <a href="#" className="bottom-link"><BookOpen size={14} /> Knowledge</a>
-        <a href="#" className="bottom-link"><Globe size={14} /> Browser</a>
         <a
           href="#"
           className="bottom-link"
@@ -243,9 +224,6 @@ export const Sidebar: React.FC = () => {
   );
 };
 
-/**
- * Workspace Session List sub-component
- */
 const WorkspaceSessionList: React.FC<{
   workspacePath: string;
   currentSessionId: string;

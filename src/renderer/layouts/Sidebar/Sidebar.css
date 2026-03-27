@@ -100,17 +100,6 @@
   opacity: 0.8;
 }
 
-.playground-header {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.info-icon {
-  display: inline-flex;
-  opacity: 0.7;
-  cursor: pointer;
-}
 
 .action-icon {
   cursor: pointer;

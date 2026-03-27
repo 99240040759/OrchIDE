@@ -73,19 +73,13 @@ export const SettingsWindow: React.FC<SettingsWindowProps> = ({ onClose }) => {
     <div className="settings-window">
       <div className="settings-titlebar">
         <div className="st-drag-area">Settings - OrchIDE</div>
-        <button className="st-close-btn" onClick={onClose} title="Close Settings"><X size={16} /></button>
       </div>
       <div className="settings-body">
         <div className="settings-sidebar">
           <div className="ss-nav">
-            {['Agent', 'Models', 'Browser', 'Workspace', 'Notifications', 'Customizations', 'Editor'].map(item => (
+            {['Models', 'Workspace', 'Account'].map(item => (
               <div key={item} className={`ss-item ${activeNav === item ? 'active' : ''}`} onClick={() => setActiveNav(item)}>{item}</div>
             ))}
-            <div className="ss-divider" />
-            <div className="ss-item" onClick={() => setActiveNav('Account')}>Account</div>
-          </div>
-          <div className="ss-footer">
-            <div className="ss-item">Provide Feedback</div>
           </div>
         </div>
 
@@ -159,47 +153,6 @@ export const SettingsWindow: React.FC<SettingsWindowProps> = ({ onClose }) => {
             </>
           )}
 
-          {activeNav === 'Agent' && (
-            <>
-              <div className="sc-section">
-                <div className="sc-section-title">SECURITY</div>
-                <div className="sc-card">
-                  <div className="sc-card-info">
-                    <div className="sc-card-title">Strict Mode</div>
-                    <div className="sc-card-desc">When enabled, prevents the agent from autonomously making destructive file operations without confirmation.</div>
-                  </div>
-                  <div className="sc-card-action">
-                    <div className="toggle-switch active"><div className="toggle-knob"></div></div>
-                  </div>
-                </div>
-              </div>
-              <div className="sc-section">
-                <div className="sc-section-title">ARTIFACT</div>
-                <div className="sc-card">
-                  <div className="sc-card-info">
-                    <div className="sc-card-title">Review Policy</div>
-                    <div className="sc-card-desc">Controls when the agent asks for review before proceeding with major creation of artifacts and implementation plans.</div>
-                  </div>
-                  <div className="sc-card-action">
-                    <button className="dropdown-btn">Agent Decides <ChevronDown size={14}/></button>
-                  </div>
-                </div>
-              </div>
-              <div className="sc-section">
-                <div className="sc-section-title">TERMINAL</div>
-                <div className="sc-card">
-                  <div className="sc-card-info">
-                    <div className="sc-card-title">Terminal Command Auto Execution</div>
-                    <div className="sc-card-desc">Controls whether agent requires confirmation before running terminal commands.</div>
-                  </div>
-                  <div className="sc-card-action">
-                    <button className="dropdown-btn">Request Review <ChevronDown size={14}/></button>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-
           {activeNav === 'Workspace' && (
             <>
               <div className="sc-section">
@@ -250,6 +203,18 @@ export const SettingsWindow: React.FC<SettingsWindowProps> = ({ onClose }) => {
                 </div>
               </div>
             </>
+          )}
+
+          {activeNav === 'Account' && (
+             <div className="sc-section">
+                <div className="sc-section-title">ACCOUNT</div>
+                <div className="sc-card">
+                  <div className="sc-card-info">
+                    <div className="sc-card-title">Status</div>
+                    <div className="sc-card-desc">You are currently using the local version of OrchIDE. Pro features and sync are coming soon.</div>
+                  </div>
+                </div>
+             </div>
           )}
         </div>
       </div>

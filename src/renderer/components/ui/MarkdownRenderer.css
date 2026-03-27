@@ -150,15 +150,6 @@
   margin: 16px 0;
 }
 
-.markdown-renderer .task-list-item {
-  list-style: none;
-  margin-left: 0;
-}
-
-.markdown-renderer .task-list-item input[type="checkbox"] {
-  margin-right: 8px;
-  transform: translateY(1px);
-}
 
 .markdown-renderer .md-mermaid {
   margin: 12px 0;

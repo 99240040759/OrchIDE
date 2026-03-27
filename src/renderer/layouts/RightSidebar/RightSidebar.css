@@ -155,34 +155,6 @@
   text-transform: capitalize;
 }
 
-/* FILES CHANGED */
-.file-change-item {
-  cursor: pointer;
-  padding: 4px 6px;
-  border-radius: 5px;
-  gap: 6px;
-  align-items: center;
-}
-.file-change-item:hover {
-  background: var(--hover-bg);
-}
-.file-change-status {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-.status-icon.added { color: #2EA043; }
-.status-icon.modified { color: var(--accent-color); }
-.status-icon.deleted { color: #F85149; }
-.file-change-name {
-  font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.file-change-name.added { color: #2EA043; }
-.file-change-name.modified { color: var(--text-color); }
-.file-change-name.deleted { color: #F85149; text-decoration: line-through; }
 
 /* AGENT STATE INDICATOR */
 .rs-agent-state {

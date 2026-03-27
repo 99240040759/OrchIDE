@@ -39,9 +39,6 @@ export const TitleBar: React.FC = () => {
         <button className="toggle-sidebar-btn icon-only" onClick={handleOpenSettings} title="Settings">
           <Settings size={15} />
         </button>
-        <button className="toggle-sidebar-btn icon-only" title="More options">
-          <MoreHorizontal size={15} />
-        </button>
         <button className="toggle-sidebar-btn" onClick={toggleEditor} title="Toggle Editor">
           <CodeXml size={15} opacity={isEditorOpen ? 1 : 0.5} />
         </button>

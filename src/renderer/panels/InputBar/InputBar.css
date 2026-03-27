@@ -110,68 +110,17 @@
   gap: 5px;
   transition: color 0.15s, background-color 0.15s;
 }
+
 .action-btn:hover:not(:disabled) {
   color: var(--text-color);
   background-color: rgba(255, 255, 255, 0.06);
 }
+
 .action-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
-.action-btn.pill {
-  border-radius: 6px;
-  padding: 5px 10px;
-  border: 1px solid var(--border-color);
-  font-size: 11px;
-  font-weight: 500;
-}
-.model-btn {
-  color: #85B6FF;
-  border-color: rgba(133,182,255,0.2) !important;
-}
-.web-btn {
-  color: #4daafc;
-  border-color: rgba(77,170,252,0.2) !important;
-}
-
-.mode-selector-wrapper {
-  position: relative;
-}
-
-.mode-menu {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 0;
-  background: var(--menu-bg, #1F1F1F);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 4px;
-  min-width: 130px;
-  z-index: 100;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-}
-.mode-option {
-  display: block;
-  width: 100%;
-  padding: 6px 12px;
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  font-size: 12px;
-  font-family: inherit;
-  cursor: pointer;
-  border-radius: 5px;
-  text-align: left;
-  transition: background-color 0.1s, color 0.1s;
-}
-.mode-option:hover {
-  background: var(--hover-bg);
-  color: var(--text-color);
-}
-.mode-option.active {
-  color: var(--accent-color);
-}
 
 .right-actions {
   margin-left: auto;

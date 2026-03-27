@@ -94,24 +94,14 @@ export const InputBar: React.FC = () => {
         onKeyDown={handleKeyDown}
         placeholder={
           activeWorkspace
-            ? `Ask the agent to work on ${activeWorkspace.name}... (Shift+Enter for newline)`
-            : 'Ask anything, search the web, or explore ideas...'
+            ? `Ask the agent to work on ${activeWorkspace.name}...`
+            : 'Ask anything, or explore ideas...'
         }
         className="main-input"
         rows={1}
         disabled={isStreaming}
       />
       <div className="input-actions">
-        <button className="action-btn pill model-btn" title="Model: NVIDIA NIM">
-          <Cpu size={13} /> NIM
-        </button>
-
-        {activeWorkspace && (
-          <button className="action-btn pill web-btn" title="Web search active">
-            <Globe size={13} /> Web
-          </button>
-        )}
-
         <div className="right-actions">
           {isStreaming ? (
             <button

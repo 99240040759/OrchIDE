@@ -57,23 +57,6 @@
   text-align: center;
 }
 
-.footer-links {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  width: 100%;
-}
-
-.footer-chip {
-  font-size: 11px;
-  color: var(--text-muted);
-  background: rgba(255,255,255,0.04);
-  border: 1px solid var(--border-color);
-  padding: 3px 10px;
-  border-radius: 12px;
-}
 
 /* THREAD STATE */
 .chatpanel-thread {
@@ -274,16 +257,6 @@
 
 
 
-.message-content.markdown .inline-code {
-  background: var(--input-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  padding: 2px 6px;
-  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
-  font-size: 12.5px;
-  color: #e8ae4c;
-}
-
 .message-content.markdown hr {
   border: none;
   border-top: 1px solid var(--border-color);
@@ -327,66 +300,6 @@
   background: rgba(255, 255, 255, 0.03);
 }
 
-.message-content.markdown .task-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 4px 0;
-  font-size: 13px;
-}
-
-.message-content.markdown .checkbox {
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
-  border: 1.5px solid var(--border-color);
-  display: inline-block;
-  flex-shrink: 0;
-  position: relative;
-}
-
-.message-content.markdown .checkbox.checked {
-  background: #2EA043;
-  border-color: #2EA043;
-}
-
-.message-content.markdown .checkbox.checked::after {
-  content: '✓';
-  position: absolute;
-  color: white;
-  font-size: 11px;
-  font-weight: bold;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-}
-
-.message-content.markdown .checkbox.progress {
-  background: var(--accent-color);
-  border-color: var(--accent-color);
-}
-
-.message-content.markdown .checkbox.progress::after {
-  content: '•';
-  position: absolute;
-  color: white;
-  font-size: 14px;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-}
-
-.message-content.markdown .task-item.done {
-  color: #2EA043;
-}
-
-.message-content.markdown .task-item.in-progress {
-  color: var(--accent-color);
-}
-
-.message-content.markdown .task-item.todo {
-  color: var(--text-muted);
-}
 
 /* ============================================
    THINKING INLINE (No Box Container)

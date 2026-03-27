@@ -1,36 +1,56 @@
 /**
  * Token Counting Utilities
- * 
- * Provides token counting for context management.
- * Uses a simple approximation for speed - can be replaced with tiktoken for accuracy.
+ *
+ * Uses js-tiktoken (pure JS, no WASM) for accurate token counting.
+ * The encoder is initialized lazily on first use and reused thereafter.
+ *
+ * All existing function signatures are preserved — no callers need to change.
  */
 
+import { getEncoding } from 'js-tiktoken';
 import type { ChatMessage, ToolDefinition } from './types';
+
+// ============================================================================
+// Encoder (lazy singleton)
+// ============================================================================
+
+// cl100k_base is used by GPT-4, GPT-3.5-turbo, and is the closest
+// standard encoding for Llama-3 / Kimi-K2 models.
+let _encoder: ReturnType<typeof getEncoding> | null = null;
+
+function getEncoder() {
+  if (!_encoder) {
+    _encoder = getEncoding('cl100k_base');
+  }
+  return _encoder;
+}
 
 // ============================================================================
 // Token Estimation
 // ============================================================================
 
-// Average characters per token (rough estimate for English text)
-const CHARS_PER_TOKEN = 4;
-
-// Overhead tokens per message (for role, formatting)
+// Overhead tokens per message (for role + formatting)
 const MESSAGE_OVERHEAD = 4;
 
 // Tool definition overhead
 const TOOL_DEFINITION_OVERHEAD = 20;
 
 /**
- * Estimate token count for a string
- * This is a fast approximation - for accurate counts, use tiktoken
+ * Count the exact number of tokens in a string using cl100k_base BPE encoding.
+ * Falls back to the character-based heuristic if encoding fails.
  */
 export function estimateTokens(text: string): number {
   if (!text) return 0;
-  return Math.ceil(text.length / CHARS_PER_TOKEN);
+  try {
+    return getEncoder().encode(text).length;
+  } catch {
+    // Fallback: character-based approximation
+    return Math.ceil(text.length / 4);
+  }
 }
 
 /**
- * Count tokens in a single message
+ * Count tokens in a single message.
  */
 export function countMessageTokens(message: ChatMessage): number {
   let tokens = MESSAGE_OVERHEAD;
@@ -43,7 +63,7 @@ export function countMessageTokens(message: ChatMessage): number {
       if (part.type === 'text' && part.text) {
         tokens += estimateTokens(part.text);
       } else if (part.type === 'image_url') {
-        // Image tokens are complex - use a rough estimate
+        // Image tokens are complex — use a rough estimate
         const detail = part.image_url?.detail ?? 'auto';
         tokens += detail === 'high' ? 765 : detail === 'low' ? 85 : 170;
       }
@@ -68,7 +88,7 @@ export function countMessageTokens(message: ChatMessage): number {
 }
 
 /**
- * Count tokens in message array
+ * Count tokens in a message array.
  */
 export function countMessagesTokens(messages: ChatMessage[]): number {
   let total = 3; // Base overhead for message array
@@ -79,7 +99,7 @@ export function countMessagesTokens(messages: ChatMessage[]): number {
 }
 
 /**
- * Count tokens in tool definitions
+ * Count tokens in tool definitions.
  */
 export function countToolTokens(tools: ToolDefinition[]): number {
   let total = 0;
@@ -93,7 +113,7 @@ export function countToolTokens(tools: ToolDefinition[]): number {
 }
 
 /**
- * Estimate total request tokens (messages + tools + system)
+ * Estimate total request tokens (messages + tools).
  */
 export function estimateRequestTokens(
   messages: ChatMessage[],
@@ -111,7 +131,7 @@ export function estimateRequestTokens(
 // ============================================================================
 
 /**
- * Calculate remaining tokens in context window
+ * Calculate remaining tokens in context window.
  */
 export function getRemainingTokens(
   contextWindowSize: number,
@@ -122,7 +142,7 @@ export function getRemainingTokens(
 }
 
 /**
- * Check if we're approaching context limit
+ * Check if we're approaching context limit.
  */
 export function isApproachingContextLimit(
   contextWindowSize: number,
@@ -133,8 +153,8 @@ export function isApproachingContextLimit(
 }
 
 /**
- * Truncate messages to fit within token limit
- * Keeps system message and most recent messages
+ * Truncate messages to fit within token limit.
+ * Keeps system message and most recent messages.
  */
 export function truncateMessages(
   messages: ChatMessage[],
@@ -165,7 +185,7 @@ export function truncateMessages(
   for (let i = nonSystemMessages.length - 1; i >= 0; i--) {
     const msg = nonSystemMessages[i];
     const msgTokens = countMessageTokens(msg);
-    
+
     if (tokens + msgTokens <= maxTokens) {
       recentMessages.unshift(msg);
       tokens += msgTokens;
@@ -177,28 +197,28 @@ export function truncateMessages(
   // Combine: system message + recent messages
   result.push(...recentMessages);
 
-  return { 
-    messages: result, 
-    truncated: result.length < messages.length 
+  return {
+    messages: result,
+    truncated: result.length < messages.length,
   };
 }
 
 /**
- * Create a summary of older messages for compaction
+ * Create a summary of older messages for compaction.
  */
 export function summarizeForCompaction(messages: ChatMessage[]): string {
   const summary: string[] = [];
-  
+
   for (const msg of messages) {
     if (msg.role === 'user') {
-      const content = typeof msg.content === 'string' 
-        ? msg.content 
+      const content = typeof msg.content === 'string'
+        ? msg.content
         : 'User provided input';
       summary.push(`User: ${content.slice(0, 200)}${content.length > 200 ? '...' : ''}`);
     } else if (msg.role === 'assistant') {
       const content = msg.content ?? '';
-      const toolInfo = msg.tool_calls?.length 
-        ? ` [Used ${msg.tool_calls.length} tool(s)]` 
+      const toolInfo = msg.tool_calls?.length
+        ? ` [Used ${msg.tool_calls.length} tool(s)]`
         : '';
       summary.push(`Assistant: ${content.slice(0, 200)}${content.length > 200 ? '...' : ''}${toolInfo}`);
     }
@@ -220,7 +240,7 @@ interface TokenBudget {
 }
 
 /**
- * Calculate token budget allocation
+ * Calculate token budget allocation.
  */
 export function calculateTokenBudget(
   contextWindowSize: number,
@@ -243,8 +263,8 @@ export function calculateTokenBudget(
 }
 
 /**
- * Get model context window size
- * Returns known sizes for common models, default otherwise
+ * Get model context window size.
+ * Returns known sizes for common models, default otherwise.
  */
 export function getModelContextSize(modelName: string): number {
   const modelSizes: Record<string, number> = {
@@ -253,20 +273,20 @@ export function getModelContextSize(modelName: string): number {
     'meta/llama-3.1-405b-instruct': 128000,
     'meta/llama-3.1-70b-instruct': 128000,
     'meta/llama-3.1-8b-instruct': 128000,
-    
+
     // OpenAI models
     'gpt-4o': 128000,
     'gpt-4o-mini': 128000,
     'gpt-4-turbo': 128000,
     'gpt-4': 8192,
     'gpt-3.5-turbo': 16385,
-    
+
     // Anthropic models
     'claude-3-opus': 200000,
     'claude-3-sonnet': 200000,
     'claude-3-haiku': 200000,
     'claude-3.5-sonnet': 200000,
-    
+
     // Default
     'default': 128000,
   };

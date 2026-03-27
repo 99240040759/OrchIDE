@@ -17,6 +17,7 @@
  *  5. If tool calls exist: execute them, add tool-result messages, loop again.
  */
 
+import { distance } from 'fastest-levenshtein';
 import type {
   AgentConfig,
   StreamEvent,
@@ -667,6 +668,7 @@ export class ToolLoop {
   /**
    * Calculate string similarity using Levenshtein distance.
    * Returns 0-1 where 1 = identical.
+   * Uses fastest-levenshtein instead of a custom DP implementation.
    */
   private calculateStringSimilarity(a: string, b: string): number {
     if (a === b) return 1;
@@ -677,41 +679,10 @@ export class ToolLoop {
     const aSlice = a.slice(0, maxLen);
     const bSlice = b.slice(0, maxLen);
 
-    const distance = this.levenshteinDistance(aSlice, bSlice);
+    const dist = distance(aSlice, bSlice);
     const maxPossible = Math.max(aSlice.length, bSlice.length);
 
-    return 1 - distance / maxPossible;
-  }
-
-  /**
-   * Levenshtein distance implementation.
-   */
-  private levenshteinDistance(a: string, b: string): number {
-    const matrix: number[][] = [];
-
-    for (let i = 0; i <= b.length; i++) {
-      matrix[i] = [i];
-    }
-
-    for (let j = 0; j <= a.length; j++) {
-      matrix[0][j] = j;
-    }
-
-    for (let i = 1; i <= b.length; i++) {
-      for (let j = 1; j <= a.length; j++) {
-        if (b.charAt(i - 1) === a.charAt(j - 1)) {
-          matrix[i][j] = matrix[i - 1][j - 1];
-        } else {
-          matrix[i][j] = Math.min(
-            matrix[i - 1][j - 1] + 1,
-            matrix[i][j - 1] + 1,
-            matrix[i - 1][j] + 1
-          );
-        }
-      }
-    }
-
-    return matrix[b.length][a.length];
+    return 1 - dist / maxPossible;
   }
 
   /**

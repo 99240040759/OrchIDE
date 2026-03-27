@@ -26,6 +26,7 @@ const createWindow = () => {
       symbolColor: '#e0e0e0',
       height: 32
     } : false,
+    trafficLightPosition: { x: 20, y: 11 },
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -78,6 +79,7 @@ app.on('ready', () => {
         symbolColor: '#e0e0e0',
         height: 32
       } : false,
+      trafficLightPosition: { x: 20, y: 11 },
       webPreferences: {
         preload: path.join(__dirname, 'preload.js'),
         contextIsolation: true,

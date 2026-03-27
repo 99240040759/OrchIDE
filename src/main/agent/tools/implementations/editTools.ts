@@ -16,6 +16,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
+import { distance } from 'fastest-levenshtein';
 import type { Tool, ToolContext, ToolResult } from '../types';
 
 // ============================================================================
@@ -74,52 +75,17 @@ function validateChecksum(content: string, expectedChecksum: string | undefined)
 // ============================================================================
 
 /**
- * Calculate Levenshtein distance between two strings.
- */
-function levenshteinDistance(a: string, b: string): number {
-  if (a.length === 0) return b.length;
-  if (b.length === 0) return a.length;
-
-  // Limit comparison to first 500 chars for performance
-  const maxLen = 500;
-  const aSlice = a.slice(0, maxLen);
-  const bSlice = b.slice(0, maxLen);
-
-  const matrix: number[][] = [];
-
-  for (let i = 0; i <= bSlice.length; i++) {
-    matrix[i] = [i];
-  }
-
-  for (let j = 0; j <= aSlice.length; j++) {
-    matrix[0][j] = j;
-  }
-
-  for (let i = 1; i <= bSlice.length; i++) {
-    for (let j = 1; j <= aSlice.length; j++) {
-      if (bSlice.charAt(i - 1) === aSlice.charAt(j - 1)) {
-        matrix[i][j] = matrix[i - 1][j - 1];
-      } else {
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j - 1] + 1, // substitution
-          matrix[i][j - 1] + 1,     // insertion
-          matrix[i - 1][j] + 1      // deletion
-        );
-      }
-    }
-  }
-
-  return matrix[bSlice.length][aSlice.length];
-}
-
-/**
  * Calculate similarity ratio (0-1) between two strings.
+ * Uses fastest-levenshtein instead of a custom DP implementation.
  */
 function calculateSimilarity(a: string, b: string): number {
   const maxLen = Math.max(a.length, b.length);
   if (maxLen === 0) return 1;
-  const distance = levenshteinDistance(a, b);
-  return 1 - (distance / Math.min(maxLen, 500));
+  // Limit to first 500 chars for performance
+  const aSlice = a.slice(0, 500);
+  const bSlice = b.slice(0, 500);
+  const dist = distance(aSlice, bSlice);
+  return 1 - (dist / Math.min(maxLen, 500));
 }
 
 /**

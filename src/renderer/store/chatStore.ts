@@ -237,24 +237,42 @@ export const useChatStore = create<ChatState>((set, get) => ({
       .map(p => p.content!)
       .join('');
 
-    const finalizedParts: LivePart[] = liveParts.map((part) => ({
-      ...part,
-      toolCall: part.toolCall
-        ? {
-            ...part.toolCall,
-            args: { ...(part.toolCall.args || {}) },
-          }
-        : undefined,
-    }));
+    // If the model wrapped its ENTIRE response in <think> tags, streamingContent
+    // will be empty but thinkingContent will have all the text. In this case,
+    // promote the thinking content to be the actual message so it renders normally
+    // instead of being buried in a collapsed "Thought process" block.
+    const hasNoTextButOnlyThinking =
+      !streamingContent.trim() && toolCalls.length === 0 && thinkingContent.trim();
 
-    const hasContent = streamingContent.trim() || toolCalls.length > 0 || thinkingContent.trim();
+    const effectiveContent = hasNoTextButOnlyThinking ? thinkingContent : streamingContent;
+    const effectiveThinking = hasNoTextButOnlyThinking ? undefined : (thinkingContent || undefined);
+
+    // Also fix the liveParts so the live render matches the final message
+    const finalizedParts: LivePart[] = hasNoTextButOnlyThinking
+      ? [{
+          id: `text-promoted-${Date.now()}`,
+          type: 'text',
+          content: thinkingContent,
+          timestamp: Date.now(),
+        }]
+      : liveParts.map((part) => ({
+          ...part,
+          toolCall: part.toolCall
+            ? {
+                ...part.toolCall,
+                args: { ...(part.toolCall.args || {}) },
+              }
+            : undefined,
+        }));
+
+    const hasContent = effectiveContent.trim() || toolCalls.length > 0 || thinkingContent.trim();
 
     if (hasContent) {
       const finalMsg: Message = {
         id: Date.now().toString(),
         role: 'assistant',
-        content: streamingContent,
-        thinking: thinkingContent || undefined,
+        content: effectiveContent,
+        thinking: effectiveThinking,
         timestamp: Date.now(),
         toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
         parts: finalizedParts.length > 0 ? finalizedParts : undefined,

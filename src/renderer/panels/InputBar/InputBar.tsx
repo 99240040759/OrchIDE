@@ -4,7 +4,7 @@
  */
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { ArrowRight, Square, Globe, Cpu } from 'lucide-react';
+import { ArrowRight, Square } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { useChatStore } from '../../store/chatStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';

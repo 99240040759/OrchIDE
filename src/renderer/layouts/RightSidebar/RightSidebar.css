@@ -121,11 +121,11 @@
 .item-text.bold { font-weight: 500; color: var(--text-color); }
 .item-text.done { text-decoration: line-through; opacity: 0.5; color: var(--text-muted); }
 
-.text-muted { color: var(--text-muted); }
 
 /* ARTIFACTS */
 .artifact-item {
   cursor: pointer;
+  display: flex;
   padding: 6px 8px;
   border-radius: 6px;
   border: 1px solid transparent;

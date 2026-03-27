@@ -250,6 +250,16 @@ export function registerAgentIPCNew(): void {
   ipcMain.handle('settings:save', async (_event, settings: Record<string, string>) => {
     const { saveSettings } = await import('../appdata');
     saveSettings(settings);
+
+    // Invalidate all active sessions so they pick up the new API key / model
+    // on the next message without requiring an app restart.
+    console.log('[Agent IPC] Settings saved — clearing all cached sessions so new config takes effect');
+    for (const [_id, session] of activeSessions) {
+      try { session.abort(); } catch { /* ignore */ }
+    }
+    activeSessions.clear();
+    sessionsWithListeners.clear();
+
     return { success: true };
   });
   // --------------------------------------------------------------------------

@@ -83,6 +83,13 @@
   border-radius: 4px;
 }
 
+.thread-messages-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-height: 100%;
+}
+
 .thread-input-area {
   padding: 16px 24px 20px;
   background: var(--bg-color);
@@ -244,16 +251,6 @@
 /* ============================================
    MARKDOWN STYLES
    ============================================ */
-.message-content.markdown h1,
-.message-content.markdown h2,
-.message-content.markdown h3 {
-  margin: 16px 0 8px;
-  color: var(--text-color);
-  font-weight: 600;
-}
-.message-content.markdown h1 { font-size: 20px; }
-.message-content.markdown h2 { font-size: 17px; }
-.message-content.markdown h3 { font-size: 15px; }
 
 
 

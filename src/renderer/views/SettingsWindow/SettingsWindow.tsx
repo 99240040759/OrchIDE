@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, ChevronDown, Check, Eye, EyeOff, RefreshCw } from 'lucide-react';
+import { Check, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import './SettingsWindow.css';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { getOrchideAPI } from '../../utils/orchide';

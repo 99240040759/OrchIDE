@@ -1,10 +1,18 @@
 /**
  * Web Tool Implementations
- * 
+ *
  * Tools for web operations.
  */
 
+import TurndownService from 'turndown';
 import type { Tool, ToolContext, ToolResult } from '../types';
+
+// Shared Turndown instance (stateless, safe to reuse)
+const turndown = new TurndownService({
+  headingStyle: 'atx',
+  codeBlockStyle: 'fenced',
+  bulletListMarker: '-',
+});
 
 // ============================================================================
 // Web Search Implementation
@@ -19,7 +27,7 @@ export const webSearchImpl: Tool['execute'] = async (
 
   // Check if Tavily API key is configured
   const tavilyApiKey = context.settings?.TAVILY_API_KEY || process.env.TAVILY_API_KEY;
-  
+
   if (!tavilyApiKey) {
     return {
       output: [{
@@ -39,7 +47,7 @@ export const webSearchImpl: Tool['execute'] = async (
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
-    
+
     if (context.signal) {
       context.signal.addEventListener('abort', () => controller.abort());
     }
@@ -140,7 +148,7 @@ export const fetchUrlImpl: Tool['execute'] = async (
         output: [{
           name: 'Error',
           description: 'Invalid URL protocol',
-          content: `Only http and https URLs are supported`,
+          content: 'Only http and https URLs are supported',
           icon: 'error',
         }],
         success: false,
@@ -151,8 +159,7 @@ export const fetchUrlImpl: Tool['execute'] = async (
     // Fetch with timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
-    
-    // Use context signal if available
+
     if (context.signal) {
       context.signal.addEventListener('abort', () => controller.abort());
     }
@@ -181,15 +188,16 @@ export const fetchUrlImpl: Tool['execute'] = async (
     }
 
     let content = await response.text();
-    
+
+    // Convert HTML → Markdown using turndown (handles all HTML entities,
+    // nested elements, tables, code blocks, etc.)
+    if (format === 'text' || format === 'markdown') {
+      content = turndown.turndown(content);
+    }
+
     // Truncate if too long
     if (content.length > maxLength) {
       content = content.slice(0, maxLength) + '\n\n[Content truncated...]';
-    }
-
-    // Convert HTML to text/markdown if requested
-    if (format === 'text' || format === 'markdown') {
-      content = htmlToText(content);
     }
 
     return {
@@ -200,7 +208,7 @@ export const fetchUrlImpl: Tool['execute'] = async (
         uri: { type: 'url', value: url },
       }],
       success: true,
-      metadata: { 
+      metadata: {
         contentLength: content.length,
         contentType: response.headers.get('content-type'),
       },
@@ -219,35 +227,3 @@ export const fetchUrlImpl: Tool['execute'] = async (
     };
   }
 };
-
-/**
- * Simple HTML to text conversion
- */
-function htmlToText(html: string): string {
-  // Remove scripts and styles
-  let text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
-  text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
-  
-  // Replace common block elements with newlines
-  text = text.replace(/<\/(p|div|h[1-6]|li|tr|br|hr)[^>]*>/gi, '\n');
-  text = text.replace(/<(br|hr)[^>]*\/?>/gi, '\n');
-  
-  // Remove remaining tags
-  text = text.replace(/<[^>]+>/g, '');
-  
-  // Decode common HTML entities
-  text = text.replace(/&nbsp;/g, ' ');
-  text = text.replace(/&lt;/g, '<');
-  text = text.replace(/&gt;/g, '>');
-  text = text.replace(/&amp;/g, '&');
-  text = text.replace(/&quot;/g, '"');
-  text = text.replace(/&#39;/g, "'");
-  
-  // Clean up whitespace
-  text = text.replace(/[ \t]+/g, ' ');
-  text = text.replace(/\n[ \t]+/g, '\n');
-  text = text.replace(/[ \t]+\n/g, '\n');
-  text = text.replace(/\n{3,}/g, '\n\n');
-  
-  return text.trim();
-}

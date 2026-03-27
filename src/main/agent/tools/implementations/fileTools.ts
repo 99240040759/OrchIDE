@@ -6,6 +6,7 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import fg from 'fast-glob';
 import type { Tool, ToolContext, ToolResult } from '../types';
 import { shouldIgnore } from '../../../../shared/utils/pathUtils';
 
@@ -473,7 +474,7 @@ export const globSearchImpl: Tool['execute'] = async (
   context: ToolContext
 ): Promise<ToolResult> => {
   const pattern = args.pattern as string;
-  
+
   if (!context.workspacePath) {
     return {
       output: [],
@@ -482,68 +483,15 @@ export const globSearchImpl: Tool['execute'] = async (
     };
   }
 
-  // Simple glob implementation - can be replaced with proper glob library
-  const matches: string[] = [];
-  const maxResults = 500;
-
-  // Convert glob to regex-ish matching
-  const globToMatcher = (glob: string): (file: string) => boolean => {
-    // Handle common patterns: *, **, ?.
-    const parts = glob.split('/');
-    const hasDoublestar = parts.includes('**');
-    const extension = parts[parts.length - 1];
-    
-    return (filePath: string) => {
-      // Simple extension matching
-      if (extension.startsWith('*.')) {
-        const ext = extension.slice(2);
-        return filePath.endsWith(`.${ext}`);
-      }
-      
-      // For ** patterns, match anywhere
-      if (hasDoublestar) {
-        const lastPart = parts[parts.length - 1];
-        if (lastPart.startsWith('*.')) {
-          const ext = lastPart.slice(2);
-          return filePath.endsWith(`.${ext}`);
-        }
-      }
-      
-      return filePath.includes(glob.replace(/\*/g, ''));
-    };
-  };
-
-  const matcher = globToMatcher(pattern);
-
-  async function searchDir(dir: string, depth = 0): Promise<void> {
-    if (matches.length >= maxResults) return;
-    if (depth > 20) return; // Prevent infinite recursion
-    if (context.signal?.aborted) return;
-
-    try {
-      const entries = await fs.readdir(dir, { withFileTypes: true });
-
-      for (const entry of entries) {
-        if (matches.length >= maxResults) break;
-        if (shouldIgnore(entry.name)) continue;
-
-        const fullPath = path.join(dir, entry.name);
-        const relativePath = toRelativePath(context.workspacePath!, fullPath);
-
-        if (entry.isDirectory()) {
-          await searchDir(fullPath, depth + 1);
-        } else if (matcher(relativePath)) {
-          matches.push(relativePath);
-        }
-      }
-    } catch {
-      // Skip directories that can't be read
-    }
-  }
-
   try {
-    await searchDir(context.workspacePath);
-    
+    const matches = await fg(pattern, {
+      cwd: context.workspacePath,
+      ignore: ['**/node_modules/**', '**/.git/**', '**/.vite/**', '**/*.bak'],
+      dot: false,
+      absolute: false,
+      onlyFiles: true,
+    });
+
     return {
       output: [{
         name: 'Glob Search Results',

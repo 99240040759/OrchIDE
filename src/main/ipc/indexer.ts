@@ -23,7 +23,7 @@ export function registerIndexerIPC(): void {
   });
 
   // Get indexer instance (starts and hooks up automatically if not existing)
-  ipcMain.handle('indexer:connect', async (event, workspacePath: string) => {
+  ipcMain.handle('indexer:connect', async (_event, workspacePath: string) => {
     try {
       getWorkspaceIndexer(workspacePath);
       return { connected: true };
@@ -33,7 +33,7 @@ export function registerIndexerIPC(): void {
   });
 
   // Reindex explicitly
-  ipcMain.handle('indexer:reindex', async (event, workspacePath: string) => {
+  ipcMain.handle('indexer:reindex', async (_event, workspacePath: string) => {
     try {
       const indexer = getWorkspaceIndexer(workspacePath);
       await indexer.reindexAll();
@@ -44,7 +44,7 @@ export function registerIndexerIPC(): void {
   });
 
   // Query Indexer status/state
-  ipcMain.handle('indexer:status', async (event, workspacePath: string) => {
+  ipcMain.handle('indexer:status', async (_event, workspacePath: string) => {
     if (!activeIndexers.has(workspacePath)) {
       return { active: false };
     }

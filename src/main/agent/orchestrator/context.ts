@@ -48,42 +48,16 @@ export interface ContextStats {
 }
 
 /** Message priority for retention during compaction */
-interface MessagePriority {
-  message: ChatMessage;
-  index: number;
-  priority: number;
-  tokens: number;
-  isProtected: boolean;
-}
 
 // ============================================================================
 // Priority Weights
 // ============================================================================
 
-const PRIORITY_WEIGHTS = {
-  /** System message — always keep */
-  system: 1000,
-  /** Most recent user message — always keep */
-  recentUser: 500,
-  /** Recent assistant messages with tool calls */
-  recentAssistantWithTools: 400,
-  /** Recent assistant text responses */
-  recentAssistantText: 350,
-  /** Tool results (errors prioritized) */
-  toolResultError: 300,
-  toolResultSuccess: 150,
-  /** Older user messages */
-  olderUser: 100,
-  /** Older assistant messages */
-  olderAssistant: 50,
-};
 
 /** Number of recent messages to always protect */
-const PROTECTED_RECENT_COUNT = 6;
 
 /** Minimum messages to keep after compaction */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for compaction enhancement
-const _MIN_MESSAGES_AFTER_COMPACTION = 4;
+
 
 // ============================================================================
 // Context Manager Class
@@ -252,71 +226,6 @@ export class ContextManager {
   /**
    * Score messages by priority for retention decisions.
    */
-  private scoreMessagesByPriority(messages: ChatMessage[]): MessagePriority[] {
-    const result: MessagePriority[] = [];
-    const messageCount = messages.length;
-
-    for (let i = 0; i < messages.length; i++) {
-      const msg = messages[i];
-      const isRecent = i >= messageCount - PROTECTED_RECENT_COUNT;
-      let priority = 0;
-      let isProtected = false;
-
-      // Calculate priority based on message type and recency
-      switch (msg.role) {
-        case 'system':
-          priority = PRIORITY_WEIGHTS.system;
-          isProtected = true;
-          break;
-
-        case 'user':
-          if (i === messageCount - 1 || isRecent) {
-            priority = PRIORITY_WEIGHTS.recentUser;
-            isProtected = true;
-          } else {
-            priority = PRIORITY_WEIGHTS.olderUser;
-          }
-          break;
-
-        case 'assistant':
-          if (isRecent) {
-            priority = msg.tool_calls?.length
-              ? PRIORITY_WEIGHTS.recentAssistantWithTools
-              : PRIORITY_WEIGHTS.recentAssistantText;
-            isProtected = true;
-          } else {
-            priority = PRIORITY_WEIGHTS.olderAssistant;
-          }
-          break;
-
-        case 'tool': {
-          // Tool results — check if error or success
-          const content = typeof msg.content === 'string' ? msg.content.toLowerCase() : '';
-          const isError =
-            content.includes('error') ||
-            content.includes('failed') ||
-            content.includes('exception');
-          priority = isError ? PRIORITY_WEIGHTS.toolResultError : PRIORITY_WEIGHTS.toolResultSuccess;
-
-          // Protect recent tool results
-          if (isRecent) {
-            isProtected = true;
-          }
-          break;
-        }
-      }
-
-      result.push({
-        message: msg,
-        index: i,
-        priority,
-        tokens: this.estimateMessageTokens(msg),
-        isProtected,
-      });
-    }
-
-    return result;
-  }
 
   /**
    * Stage 3: Aggressive compaction with summary generation.
@@ -340,98 +249,6 @@ export class ContextManager {
   /**
    * Create an extractive summary of messages.
    */
-  private createExtractSummary(messages: ChatMessage[]): string {
-    const sections: string[] = ['<conversation_summary>'];
-
-    // Extract key information
-    const userRequests: string[] = [];
-    const toolsUsed = new Set<string>();
-    const filesModified = new Set<string>();
-    const errorsEncountered: string[] = [];
-    const completedActions: string[] = [];
-
-    for (const msg of messages) {
-      // User requests
-      if (msg.role === 'user' && typeof msg.content === 'string') {
-        const preview = msg.content.slice(0, 150).replace(/\n/g, ' ').trim();
-        if (preview.length > 20 && userRequests.length < 5) {
-          userRequests.push(preview);
-        }
-      }
-
-      // Tool calls
-      if (msg.role === 'assistant' && msg.tool_calls) {
-        for (const tc of msg.tool_calls) {
-          toolsUsed.add(tc.function.name);
-
-          // Extract file paths
-          try {
-            const args = JSON.parse(tc.function.arguments);
-            if (args.filePath) filesModified.add(args.filePath);
-            if (args.targetPath) filesModified.add(args.targetPath);
-          } catch {
-            // Ignore parse errors
-          }
-        }
-      }
-
-      // Tool results
-      if (msg.role === 'tool' && typeof msg.content === 'string') {
-        const content = msg.content;
-        const isError =
-          content.toLowerCase().includes('error') ||
-          content.toLowerCase().includes('failed');
-
-        if (isError && errorsEncountered.length < 3) {
-          const errorPreview = content.slice(0, 200).replace(/\n/g, ' ');
-          errorsEncountered.push(errorPreview);
-        } else if (
-          !isError &&
-          (content.includes('success') || content.includes('created') || content.includes('modified'))
-        ) {
-          const actionPreview = content.slice(0, 100).replace(/\n/g, ' ');
-          if (completedActions.length < 5) {
-            completedActions.push(actionPreview);
-          }
-        }
-      }
-    }
-
-    // Build summary
-    if (userRequests.length > 0) {
-      sections.push('\n**User Requests:**');
-      for (const req of userRequests) {
-        sections.push(`- ${req}${req.length >= 150 ? '...' : ''}`);
-      }
-    }
-
-    if (toolsUsed.size > 0) {
-      sections.push(`\n**Tools Used:** ${Array.from(toolsUsed).join(', ')}`);
-    }
-
-    if (filesModified.size > 0) {
-      const files = Array.from(filesModified).slice(0, 10);
-      sections.push(`\n**Files Involved:** ${files.join(', ')}`);
-    }
-
-    if (completedActions.length > 0) {
-      sections.push('\n**Completed Actions:**');
-      for (const action of completedActions) {
-        sections.push(`- ${action}`);
-      }
-    }
-
-    if (errorsEncountered.length > 0) {
-      sections.push('\n**Errors Encountered:**');
-      for (const error of errorsEncountered) {
-        sections.push(`- ${error}${error.length >= 200 ? '...' : ''}`);
-      }
-    }
-
-    sections.push('\n</conversation_summary>');
-
-    return sections.join('\n');
-  }
 
   // ==========================================================================
   // Token Estimation

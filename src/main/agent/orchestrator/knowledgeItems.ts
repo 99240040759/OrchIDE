@@ -107,22 +107,7 @@ const DEFAULT_KI_PRIORITY: Record<KICategory, number> = {
 };
 
 /** Files to scan for auto-discovery */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for auto-discovery feature
-const _AUTO_DISCOVERY_FILES = [
-  'README.md',
-  'package.json',
-  'pyproject.toml',
-  'Cargo.toml',
-  'go.mod',
-  'pom.xml',
-  'build.gradle',
-  'tsconfig.json',
-  '.env.example',
-  'docker-compose.yml',
-  'Dockerfile',
-  'Makefile',
-  '.github/workflows/*.yml',
-];
+
 
 // ============================================================================
 // KI Manager Class

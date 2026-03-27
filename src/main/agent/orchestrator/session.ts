@@ -142,7 +142,7 @@ export class AgentSession extends EventEmitter {
       contextManager: this.contextManager,
       modeEnforcer: this.modeEnforcer,
       onStream: (event) => this.emit('stream', event),
-      onAgentEvent: (event) => this.emit('agent_event', event),
+
       onToolApprovalRequired: (calls) => this.handleToolApprovalRequired(calls),
     });
   }

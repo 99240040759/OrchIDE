@@ -10,7 +10,7 @@ interface SettingsWindowProps {
 
 const orchide = getOrchideAPI();
 
-export const SettingsWindow: React.FC<SettingsWindowProps> = ({ onClose }) => {
+export const SettingsWindow: React.FC<SettingsWindowProps> = () => {
   const [activeNav, setActiveNav] = useState('Models');
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState(false);

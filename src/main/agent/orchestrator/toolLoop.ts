@@ -52,8 +52,7 @@ const MAX_FILE_EDIT_FAILURES = 3;
 const FUZZY_SIMILARITY_THRESHOLD = 0.85;
 
 /** Max stall hints to inject before forcing break */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future stall-breaker enhancement
-const _MAX_STALL_HINTS = 2;
+
 
 // ============================================================================
 // Types
@@ -68,7 +67,7 @@ export interface ToolLoopConfig {
   contextManager: ContextManager;
   modeEnforcer?: ModeEnforcer;
   onStream: (event: StreamEvent) => void;
-  onAgentEvent: (event: unknown) => void;
+
   onToolApprovalRequired: (toolCalls: ToolCallState[]) => Promise<void>;
 }
 
@@ -104,7 +103,7 @@ export class ToolLoop {
   private contextManager: ContextManager;
   private modeEnforcer?: ModeEnforcer;
   private onStream: (event: StreamEvent) => void;
-  private onAgentEvent: (event: unknown) => void;
+
   private onToolApprovalRequired: (toolCalls: ToolCallState[]) => Promise<void>;
 
   constructor(config: ToolLoopConfig) {
@@ -116,7 +115,7 @@ export class ToolLoop {
     this.contextManager = config.contextManager;
     this.modeEnforcer = config.modeEnforcer;
     this.onStream = config.onStream;
-    this.onAgentEvent = config.onAgentEvent;
+
     this.onToolApprovalRequired = config.onToolApprovalRequired;
   }
 

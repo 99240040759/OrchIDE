@@ -118,18 +118,17 @@ export const Sidebar: React.FC = () => {
               {/* Chat History Collapsible */}
               <Collapsible open={showChatHistory} onOpenChange={setShowChatHistory}>
                 <CollapsibleTrigger className="flex items-center gap-2 px-3 py-1.5 w-full text-orch-fg2 cursor-pointer text-[13px] rounded-md hover:text-orch-fg hover:bg-orch-hover transition-colors">
-                  <Icon name="history" size={14} />
-                  <span>Chat History</span>
+                  <Icon name="history" size={14} className="flex-shrink-0" />
+                  <span className="flex-1 truncate text-left">Chat History</span>
                   <Icon
                     name="chevron-down"
                     size={12}
-                    className={cn('ml-auto transition-transform duration-200', showChatHistory && 'rotate-180')}
+                    className={cn('flex-shrink-0 transition-transform duration-200', showChatHistory && 'rotate-180')}
                   />
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <div className="py-1">
                     {historyLoading ? (
-                      /* Skeleton loading state */
                       <div className="flex flex-col gap-1.5 px-3 py-2">
                         <Skeleton className="h-[18px] w-[85%] bg-orch-hover" />
                         <Skeleton className="h-[18px] w-[70%] bg-orch-hover" />
@@ -158,10 +157,10 @@ export const Sidebar: React.FC = () => {
               {/* Workspaces */}
               <div>
                 <div className="flex items-center px-3 py-1 text-[11px] text-orch-fg font-semibold uppercase tracking-[0.4px] opacity-80">
-                  <span>Workspaces</span>
+                  <span className="flex-1 truncate">Workspaces</span>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <button className="ml-auto p-0.5 rounded-md text-orch-fg2 hover:text-orch-fg hover:bg-orch-hover" onClick={openWorkspace}>
+                      <button className="flex-shrink-0 ml-auto p-0.5 rounded-md text-orch-fg2 hover:text-orch-fg hover:bg-orch-hover" onClick={openWorkspace}>
                         <Icon name="add" size={14} />
                       </button>
                     </TooltipTrigger>
@@ -180,10 +179,10 @@ export const Sidebar: React.FC = () => {
           ) : (
             /* ── Workspace mode ────────────────────────────────────── */
             <div className="flex flex-col gap-2">
-              {/* Workspace header */}
-              <div className="group flex items-center h-[34px] px-2 mx-1.5 mb-1 bg-primary/10 rounded-md border border-primary/20 transition-colors">
-                <Icon name="folder-opened" size={14} className="text-orch-accent flex-shrink-0 mr-2" />
-                <span className="flex-1 font-semibold text-[12px] truncate min-w-0 pr-2" title={activeWorkspace.path}>
+              {/* Workspace header — min-w-0 allows the name to shrink and truncate */}
+              <div className="group flex items-center gap-2 h-[34px] px-2 mx-1.5 mb-1 bg-primary/10 rounded-md border border-primary/20 min-w-0">
+                <Icon name="folder-opened" size={14} className="text-orch-accent flex-shrink-0" />
+                <span className="flex-1 min-w-0 font-semibold text-[12px] truncate" title={activeWorkspace.path}>
                   {activeWorkspace.name}
                 </span>
                 <button
@@ -249,6 +248,7 @@ export const Sidebar: React.FC = () => {
   );
 };
 
+/* ─── Session Item ────────────────────────────────────────────────────────── */
 const SessionItem: React.FC<{
   session: Session; isActive: boolean;
   onSelect: () => void; onDelete: (e: React.MouseEvent) => void;
@@ -258,17 +258,19 @@ const SessionItem: React.FC<{
   return (
     <div
       className={cn(
-        'group flex items-center h-[32px] px-2 text-orch-fg2 cursor-pointer rounded-md mb-px mx-1 transition-colors relative',
+        'group flex items-center gap-1 h-[32px] px-2 text-orch-fg2 cursor-pointer rounded-md mb-px mx-1 transition-colors min-w-0',
         'hover:bg-orch-hover hover:text-orch-fg',
         isActive && 'bg-primary/20 text-orch-fg font-medium',
       )}
       onClick={onSelect}
     >
-      <span className="truncate flex-1 text-[12px] min-w-0 pr-2">{session.title || 'Untitled'}</span>
-      
-      <div className="flex items-center gap-1 flex-shrink-0">
+      {/* Title takes all available space and truncates */}
+      <span className="flex-1 min-w-0 truncate text-[12px]">{session.title || 'Untitled'}</span>
+
+      {/* Right side: time + delete — never shrink */}
+      <div className="flex-shrink-0 flex items-center gap-1">
         {timeStr && (
-          <span className="text-[10px] text-orch-fg2 opacity-60 whitespace-nowrap group-hover:hidden truncate">
+          <span className="text-[10px] text-orch-fg2 opacity-60 whitespace-nowrap group-hover:hidden">
             {timeStr}
           </span>
         )}

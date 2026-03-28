@@ -64,9 +64,10 @@ export const RightSidebar: React.FC = () => {
 
         {/* Task Progress — Collapsible section */}
         <Collapsible defaultOpen>
-          <CollapsibleTrigger className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.5px] mb-2.5 text-orch-fg opacity-70 w-full hover:opacity-100 transition-opacity">
-            <span>{taskTitle || 'Progress'}</span>
-            <Icon name="link-external" size={12} className="ml-auto" />
+          {/* min-w-0 on the trigger lets the title truncate instead of expanding the row */}
+          <CollapsibleTrigger className="flex items-center gap-1.5 w-full mb-2.5 text-[10px] font-bold uppercase tracking-[0.5px] text-orch-fg opacity-70 hover:opacity-100 transition-opacity min-w-0">
+            <span className="flex-1 min-w-0 truncate text-left">{taskTitle || 'Progress'}</span>
+            <Icon name="link-external" size={12} className="flex-shrink-0" />
           </CollapsibleTrigger>
           <CollapsibleContent>
             {taskItems.length === 0 ? (
@@ -75,7 +76,6 @@ export const RightSidebar: React.FC = () => {
               <>
                 {totalCount > 0 && (
                   <div className="relative mb-4">
-                    {/* shadcn Progress component */}
                     <Progress value={progressPct} className="h-[3px] bg-orch-hover [&>div]:bg-orch-accent" />
                     <span className="absolute right-0 -top-4 text-[9px] text-orch-fg2 font-semibold">
                       {completedCount}/{totalCount}
@@ -86,12 +86,12 @@ export const RightSidebar: React.FC = () => {
                   {taskItems.map(item => (
                     <div
                       key={item.id}
-                      className={cn('flex items-start gap-[7px] leading-[1.4]', item.depth === 1 && 'pl-3.5', item.depth >= 2 && 'pl-6')}
+                      className={cn('flex items-start gap-[7px] leading-[1.4] min-w-0', item.depth === 1 && 'pl-3.5', item.depth >= 2 && 'pl-6')}
                     >
                       {item.status === 'done'        && <Icon name="pass"           size={13} className="text-orch-green mt-px flex-shrink-0" />}
                       {item.status === 'in-progress' && <Spinner size={13} className="text-orch-accent mt-px flex-shrink-0" />}
                       {item.status === 'todo'        && <Icon name="circle-outline" size={13} className="opacity-50 mt-px flex-shrink-0" />}
-                      <span className={cn('flex-1 text-orch-fg2 text-[12px]', item.status === 'done' && 'line-through opacity-50')}>
+                      <span className={cn('flex-1 min-w-0 text-orch-fg2 text-[12px] truncate', item.status === 'done' && 'line-through opacity-50')}>
                         {item.text}
                       </span>
                     </div>
@@ -106,9 +106,10 @@ export const RightSidebar: React.FC = () => {
 
         {/* Artifacts — Collapsible section */}
         <Collapsible defaultOpen>
-          <CollapsibleTrigger className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.5px] mb-2.5 text-orch-fg opacity-70 w-full hover:opacity-100 transition-opacity">
-            <span>Artifacts</span>
-            <Icon name="info" size={12} className="ml-auto" />
+          {/* min-w-0 on the trigger lets the title truncate instead of expanding the row */}
+          <CollapsibleTrigger className="flex items-center gap-1.5 w-full mb-2.5 text-[10px] font-bold uppercase tracking-[0.5px] text-orch-fg opacity-70 hover:opacity-100 transition-opacity min-w-0">
+            <span className="flex-1 min-w-0 truncate text-left">Artifacts</span>
+            <Icon name="info" size={12} className="flex-shrink-0" />
           </CollapsibleTrigger>
           <CollapsibleContent>
             {artifacts.length === 0 ? (
@@ -117,16 +118,15 @@ export const RightSidebar: React.FC = () => {
               artifacts.map(artifact => (
                 <div
                   key={artifact.id}
-                  className="flex items-center gap-2 px-2 py-1.5 mb-2 rounded-md border border-transparent cursor-pointer transition-colors hover:bg-orch-hover hover:border-orch-border"
+                  className="flex items-center gap-2 px-2 py-1.5 mb-2 rounded-md border border-transparent cursor-pointer transition-colors hover:bg-orch-hover hover:border-orch-border min-w-0"
                   onClick={() => openArtifact(artifact.filePath, artifact.name)}
                   title={artifact.filePath}
                 >
-                  <span className="text-orch-accent flex items-center flex-shrink-0">
-                    <Icon name={ARTIFACT_ICONS[artifact.icon] || 'file'} size={14} />
-                  </span>
-                  <div className="flex flex-col gap-px min-w-0">
+                  <Icon name={ARTIFACT_ICONS[artifact.icon] || 'file'} size={14} className="text-orch-accent flex-shrink-0" />
+                  {/* flex-1 min-w-0 here is the key: forces this column to shrink so the icon above is always visible */}
+                  <div className="flex flex-col gap-px flex-1 min-w-0">
                     <span className="font-medium text-orch-fg text-[12px] truncate">{artifact.name}</span>
-                    <span className="text-[10px] text-orch-fg2 capitalize">{artifact.type.replace('_', ' ')}</span>
+                    <span className="text-[10px] text-orch-fg2 capitalize truncate">{artifact.type.replace('_', ' ')}</span>
                   </div>
                 </div>
               ))

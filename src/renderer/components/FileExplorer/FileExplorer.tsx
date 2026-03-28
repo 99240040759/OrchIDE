@@ -97,7 +97,7 @@ export const FileExplorer: React.FC = () => {
         <ContextMenuTrigger asChild>
           <div>
             <div
-              className="flex items-center gap-1 py-[3px] pr-2 cursor-pointer rounded transition-colors hover:bg-orch-hover overflow-hidden whitespace-nowrap"
+              className="flex items-center gap-1 py-[3px] pr-2 cursor-pointer rounded transition-colors hover:bg-orch-hover overflow-hidden whitespace-nowrap min-w-0 w-full"
               style={{ paddingLeft: `${8 + depth * 12}px` }}
               onClick={() => handleFileClick(entry)}
             >
@@ -118,7 +118,7 @@ export const FileExplorer: React.FC = () => {
               {isRenaming ? (
                 <input
                   ref={renameRef}
-                  className="flex-1 bg-orch-input border border-orch-accent text-orch-fg text-[12px] font-[inherit] px-1 py-px rounded outline-none"
+                  className="flex-1 bg-orch-input border border-orch-accent text-orch-fg text-[12px] font-[inherit] px-1 py-px rounded outline-none min-w-0"
                   value={renameValue}
                   onChange={e => setRenameValue(e.target.value)}
                   onBlur={() => commitRename(entry)}
@@ -126,7 +126,7 @@ export const FileExplorer: React.FC = () => {
                   onClick={e => e.stopPropagation()}
                 />
               ) : (
-                <span className="flex-1 overflow-hidden text-ellipsis text-orch-fg text-[12px]">{entry.name}</span>
+                <span className="flex-1 overflow-hidden text-ellipsis text-orch-fg text-[12px] min-w-0">{entry.name}</span>
               )}
             </div>
             {entry.isDir && isOpen && entry.children?.map(c => renderEntry(c, depth + 1))}
@@ -170,7 +170,7 @@ export const FileExplorer: React.FC = () => {
   };
 
   return (
-    <div className="text-[12px] text-orch-fg select-none">
+    <div className="text-[12px] text-orch-fg select-none w-full min-w-0 overflow-x-hidden">
       {fileTree.length === 0
         ? <div className="px-3 py-2 text-orch-fg2">Loading...</div>
         : fileTree.map(e => renderEntry(e))

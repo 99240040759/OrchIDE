@@ -230,11 +230,11 @@ const App: React.FC = () => {
       <TitleBar />
       <div className="app-body flex flex-1 overflow-hidden">
         {isLeftSidebarOpen && (
-          <div id="left-sidebar" className="w-[260px] flex-shrink-0 bg-orch-surface border-r border-orch-border flex flex-col">
+          <div id="left-sidebar" className="w-[260px] flex-shrink-0 bg-orch-surface border-r border-orch-border flex flex-col overflow-hidden">
             <Sidebar />
           </div>
         )}
-        <div id="main-content" className="flex-1 flex flex-col bg-orch-bg overflow-y-auto">
+        <div id="main-content" className="flex-1 min-w-0 flex flex-col bg-orch-bg overflow-y-auto">
           <ChatPanel />
         </div>
         {isEditorOpen && (
@@ -243,7 +243,7 @@ const App: React.FC = () => {
           </div>
         )}
         {isRightSidebarOpen && (
-          <div id="right-sidebar" className="w-[280px] flex-shrink-0 bg-orch-surface border-l border-orch-border flex flex-col">
+          <div id="right-sidebar" className="w-[280px] flex-shrink-0 bg-orch-surface border-l border-orch-border flex flex-col overflow-hidden">
             <RightSidebar />
           </div>
         )}

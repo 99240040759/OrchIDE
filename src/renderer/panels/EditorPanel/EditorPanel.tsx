@@ -1,8 +1,10 @@
 /**
  * EditorPanel — Refactored to use shadcn/ui Tabs + ScrollArea
+ * Now using useDebouncedCallback for cleaner autosave implementation
  */
 
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useCallback } from 'react';
+import { useDebouncedCallback } from 'use-debounce';
 import MonacoEditor from '@monaco-editor/react';
 import { Icon } from '../../components/ui/Icon';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs';
@@ -16,8 +18,6 @@ import { cn } from '@/lib/utils';
 
 const orchide = getOrchideAPI();
 const AUTOSAVE_DELAY = 700;
-
-interface PendingSave { content: string; version: number; }
 
 const monacoTheme = {
   base: 'vs-dark' as const,
@@ -50,45 +50,51 @@ export const EditorPanel: React.FC = () => {
   const setActiveFile     = useWorkspaceStore(state => state.setActiveFile);
   const updateFileContent = useWorkspaceStore(state => state.updateFileContent);
 
-  const saveTimers      = useRef<Map<string, NodeJS.Timeout>>(new Map());
-  const pendingContent  = useRef<Map<string, PendingSave>>(new Map());
-
   const activeFile     = openFiles.find(f => f.path === activeFilePath) || null;
   const activeLanguage = activeFile
     ? (activeFile.language || getLanguageFromFilename(activeFile.name))
     : 'plaintext';
   const isMarkdownPreview = !!activeFile && activeLanguage === 'markdown';
 
+  /**
+   * Debounced file save handler
+   * Uses use-debounce for clean, declarative debouncing
+   */
+  const debouncedSave = useDebouncedCallback(
+    async (filePath: string, content: string) => {
+      const result = await orchide?.fs.writeFile(filePath, content);
+      if (!result?.error) {
+        // Mark file as saved (not dirty)
+        useWorkspaceStore.getState().updateFileContent(filePath, content, false);
+      } else {
+        console.error('[EditorPanel] Failed to save file:', result?.error);
+      }
+    },
+    AUTOSAVE_DELAY
+  );
+
+  /**
+   * Handle editor content changes
+   * Updates store immediately and triggers debounced save
+   */
   const handleChange = useCallback((newContent: string | undefined, filePath: string) => {
     if (newContent === undefined) return;
-    const currentVersion = (pendingContent.current.get(filePath)?.version ?? 0) + 1;
-    pendingContent.current.set(filePath, { content: newContent, version: currentVersion });
+    
+    // Update store immediately (marks file as dirty)
     updateFileContent(filePath, newContent, true);
-    const existing = saveTimers.current.get(filePath);
-    if (existing) clearTimeout(existing);
-    const timer = setTimeout(async () => {
-      const pending = pendingContent.current.get(filePath);
-      if (!pending) return;
-      const { content: contentToSave, version: saveVersion } = pending;
-      const result = await orchide?.fs.writeFile(filePath, contentToSave);
-      if (!result?.error) {
-        const latestPending = pendingContent.current.get(filePath);
-        if (latestPending && latestPending.version === saveVersion) {
-          useWorkspaceStore.getState().updateFileContent(filePath, contentToSave, false);
-          pendingContent.current.delete(filePath);
-        }
-      }
-    }, AUTOSAVE_DELAY);
-    saveTimers.current.set(filePath, timer);
-  }, [updateFileContent]);
+    
+    // Trigger debounced save
+    debouncedSave(filePath, newContent);
+  }, [updateFileContent, debouncedSave]);
 
+  /**
+   * Cleanup: Cancel pending saves on unmount
+   */
   useEffect(() => {
     return () => {
-      saveTimers.current.forEach(t => clearTimeout(t));
-      saveTimers.current.clear();
-      pendingContent.current.clear();
+      debouncedSave.cancel();
     };
-  }, []);
+  }, [debouncedSave]);
 
   const handleDownload = useCallback(() => {
     if (!activeFile) return;

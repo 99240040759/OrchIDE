@@ -25,8 +25,27 @@ export const webSearchImpl: Tool['execute'] = async (
   const query = args.query as string;
   const maxResults = (args.maxResults as number) ?? 5;
 
-  // Check if Tavily API key is configured
-  const tavilyApiKey = context.settings?.TAVILY_API_KEY || process.env.TAVILY_API_KEY;
+  // Normalize settings to a legacy Record<string,string> map for backward-compatibility
+  const settingsMap: Record<string, string> | undefined = (() => {
+    if (!context.settings) return undefined;
+    try {
+      // If settings already in legacy string map shape, use directly
+      const maybeStringMap = context.settings as Record<string, string>;
+      // Quick check: if all values are strings, assume legacy map
+      const allStrings = Object.values(maybeStringMap).every(v => typeof v === 'string');
+      if (allStrings) return maybeStringMap;
+    } catch { /* ignore */ }
+
+    // Otherwise, coerce values to strings
+    const coerced: Record<string, string> = {};
+    Object.entries(context.settings as Record<string, unknown>).forEach(([k, v]) => {
+      if (v === undefined || v === null) return;
+      coerced[k] = typeof v === 'object' ? JSON.stringify(v) : String(v);
+    });
+    return coerced;
+  })();
+
+  const tavilyApiKey = settingsMap?.TAVILY_API_KEY || process.env.TAVILY_API_KEY;
 
   if (!tavilyApiKey) {
     return {

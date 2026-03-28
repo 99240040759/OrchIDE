@@ -13,6 +13,7 @@ import type {
   ContextItem,
   AgentConfig,
 } from '../core/types';
+import type { AppSettings } from '../../../shared/types/settings';
 
 // Re-export core types that are part of the public API
 export type { ToolDefinition, ToolPolicy } from '../core/types';
@@ -92,7 +93,7 @@ export interface ToolContext {
   config: AgentConfig;
   
   /** Application settings */
-  settings?: Record<string, string>;
+  settings?: AppSettings | Record<string, string>;
   
   /** Abort signal for cancellation */
   signal?: AbortSignal;

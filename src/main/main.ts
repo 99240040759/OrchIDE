@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
-import { initAppData } from './appdata';
+import { initAppData, initSettings } from './appdata';
 import { getDb } from './db';
 import { registerFileSystemIPC } from './ipc/fileSystem';
 import { registerWatcherIPC } from './ipc/watcher';
@@ -55,6 +55,9 @@ const createWindow = () => {
 app.on('ready', () => {
   // Initialize AppData folder structure
   initAppData();
+  
+  // Initialize settings store and migrate from legacy if needed
+  initSettings();
 
   // Initialize SQLite DB
   getDb();

@@ -1,11 +1,12 @@
 /**
  * AppData utilities for managing application data directories
- * Handles session files, settings, and database paths
+ * Handles session files and database paths
  */
 
 import { app } from 'electron';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
+import { settingsStore, migrateFromLegacySettings, getAllSettings } from './services/settingsStore';
 
 let _appDataDir: string | null = null;
 
@@ -31,13 +32,6 @@ export function getSessionDir(sessionId: string): string {
  */
 export function getDbPath(): string {
   return path.join(getAppDataDir(), 'orch.db');
-}
-
-/**
- * Get the path to the settings file
- */
-export function getSettingsPath(): string {
-  return path.join(getAppDataDir(), 'settings.json');
 }
 
 /**
@@ -90,25 +84,33 @@ export function writeSessionFile(sessionId: string, filename: string, content: s
 }
 
 /**
- * Load application settings
+ * Initialize settings system and migrate from legacy format if needed
+ * Should be called once on app startup
  */
-export function loadSettings(): Record<string, string> {
-  const settingsPath = getSettingsPath();
-  if (!fs.existsSync(settingsPath)) return {};
-  try {
-    return JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
-  } catch {
-    return {};
+export function initSettings(): void {
+  const legacySettingsPath = path.join(getAppDataDir(), 'settings.json');
+  
+  // Check if legacy settings.json exists
+  if (fs.existsSync(legacySettingsPath)) {
+    try {
+      const legacySettings = JSON.parse(fs.readFileSync(legacySettingsPath, 'utf-8'));
+      
+      // Only migrate if legacy file has content and electron-store is empty/minimal
+      if (Object.keys(legacySettings).length > 0 && Object.keys(getAllSettings()).length <= 5) {
+        console.log('[AppData] Migrating settings from legacy format...');
+        migrateFromLegacySettings(legacySettings);
+        
+        // Backup legacy file
+        const backupPath = `${legacySettingsPath}.backup`;
+        fs.copyFileSync(legacySettingsPath, backupPath);
+        console.log(`[AppData] Legacy settings backed up to: ${backupPath}`);
+        
+        // Delete the legacy file after successful migration
+        fs.unlinkSync(legacySettingsPath);
+        console.log('[AppData] Legacy settings.json removed');
+      }
+    } catch (error) {
+      console.error('[AppData] Failed to migrate legacy settings:', error);
+    }
   }
-}
-
-/**
- * Save application settings
- */
-export function saveSettings(settings: Record<string, string>): void {
-  const dir = getAppDataDir();
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-  fs.writeFileSync(getSettingsPath(), JSON.stringify(settings, null, 2), 'utf-8');
 }

@@ -1,9 +1,13 @@
 /**
  * Path utilities - Browser-safe functions
- * These functions work in both Node.js and browser environments
+ * 
+ * Uses 'pathe' package for cross-platform path operations.
+ * Keeps domain-specific logic like shouldIgnore() for OrchIDE.
  * 
  * SINGLE SOURCE OF TRUTH for path-related utilities used across the codebase.
  */
+
+import { basename, dirname, isAbsolute, join, extname } from 'pathe';
 
 /**
  * Directories and files that should be ignored during file operations
@@ -36,9 +40,7 @@ const IGNORED_ENTRIES = new Set([
  * @returns The filename
  */
 export function getFilename(filePath: string): string {
-  // Handle both Unix and Windows separators
-  const parts = filePath.split(/[/\\]/);
-  return parts[parts.length - 1] || filePath;
+  return basename(filePath);
 }
 
 /**
@@ -47,9 +49,7 @@ export function getFilename(filePath: string): string {
  * @returns The directory path
  */
 export function getDirname(filePath: string): string {
-  const parts = filePath.split(/[/\\]/);
-  parts.pop();
-  return parts.join('/') || '/';
+  return dirname(filePath);
 }
 
 /**
@@ -58,11 +58,7 @@ export function getDirname(filePath: string): string {
  * @returns True if the path is absolute
  */
 export function isAbsolutePath(filePath: string): boolean {
-  // Unix absolute path
-  if (filePath.startsWith('/')) return true;
-  // Windows absolute path (e.g., C:\, D:\)
-  if (/^[A-Za-z]:[/\\]/.test(filePath)) return true;
-  return false;
+  return isAbsolute(filePath);
 }
 
 /**
@@ -71,14 +67,12 @@ export function isAbsolutePath(filePath: string): boolean {
  * @returns The joined path
  */
 export function joinPath(...segments: string[]): string {
-  return segments
-    .filter(Boolean)
-    .join('/')
-    .replace(/\/+/g, '/');
+  return join(...segments);
 }
 
 /**
  * Check if a file/folder name should be ignored
+ * This is OrchIDE-specific logic for file tree operations
  * @param name - The file or folder name
  * @returns True if should be ignored
  */
@@ -95,8 +89,7 @@ export function shouldIgnore(name: string): boolean {
  * @returns The extension without the dot, or empty string
  */
 export function getExtension(filename: string): string {
-  const baseName = getFilename(filename);
-  const parts = baseName.split('.');
-  if (parts.length < 2) return '';
-  return parts.pop()?.toLowerCase() || '';
+  const ext = extname(filename);
+  // Remove the leading dot and return lowercase
+  return ext ? ext.slice(1).toLowerCase() : '';
 }

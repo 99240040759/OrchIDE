@@ -56,7 +56,7 @@ export { ContextManager } from './orchestrator/context';
 // ============================================================================
 
 import { AgentSession, AgentSessionConfig } from './orchestrator';
-import { loadSettings } from '../appdata';
+import { settingsStore } from '../services/settingsStore';
 
 /**
  * Create a new agent session with default configuration
@@ -66,15 +66,13 @@ export function createAgentSession(
   workspacePath: string,
   options?: Partial<AgentSessionConfig>
 ): AgentSession {
-  const settings = loadSettings();
-
   const config: AgentSessionConfig = {
     sessionId,
     workspacePath,
     llmConfig: {
-      apiBase: settings.nimBaseUrl || 'http://localhost:8000/v1',
-      apiKey: settings.nimApiKey || '',
-      model: settings.nimModel || 'meta/llama-3.3-70b-instruct',
+      apiBase: settingsStore.get('nimBaseUrl' as any) || 'http://localhost:8000/v1',
+      apiKey: settingsStore.get('nimApiKey' as any) || '',
+      model: settingsStore.get('nimModel' as any) || 'meta/llama-3.3-70b-instruct',
     },
     ...options,
   };

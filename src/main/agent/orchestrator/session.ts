@@ -25,7 +25,8 @@ import type { ToolContext } from '../tools/types';
 import { ToolLoop } from './toolLoop';
 import { ContextManager } from './context';
 import { buildSystemPrompt } from './systemPrompt';
-import { getSessionDir, loadSettings } from '../../appdata';
+import { getSessionDir } from '../../appdata';
+import { settingsStore } from '../../services/settingsStore';
 import { KnowledgeItemManager } from './knowledgeItems';
 import { ModeEnforcer, type AgentMode, type ToolPermissionResult } from './modeEnforcement';
 
@@ -269,12 +270,13 @@ export class AgentSession extends EventEmitter {
    * Get tool context for tool execution — FIXED: passes settings for web search
    */
   getToolContext(): ToolContext {
-    let settings: Record<string, string> | undefined;
-    try {
-      settings = loadSettings();
-    } catch {
-      settings = undefined;
-    }
+    // Convert settings into legacy Record<string,string> shape for backward compatibility
+    const rawSettings = settingsStore.store;
+    const legacySettings: Record<string, string> = {};
+    Object.entries(rawSettings).forEach(([k, v]) => {
+      if (v === undefined || v === null) return;
+      legacySettings[k] = typeof v === 'object' ? JSON.stringify(v) : String(v);
+    });
 
     return {
       config: this.config,
@@ -282,7 +284,7 @@ export class AgentSession extends EventEmitter {
       workspaceName: this.config.workspaceName,
       sessionId: this.sessionId,
       sessionPath: getSessionDir(this.sessionId),
-      settings,  // ← FIX: Tavily key is now accessible
+      settings: legacySettings,
       signal: this.abortController?.signal,
       sendEvent: (event: unknown) => this.emit('agent_event', event),
     };

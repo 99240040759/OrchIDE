@@ -20,7 +20,8 @@ import type {
   AgentEvent,
   AssistantMessage,
 } from '../agent/core/types';
-import { loadSettings, getAppDataDir } from '../appdata';
+import { getAppDataDir, initSettings } from '../appdata';
+import { settingsStore, getAllSettings } from '../services/settingsStore';
 import * as path from 'node:path';
 import {
   createSession as dbCreateSession,
@@ -59,9 +60,9 @@ function getOrCreateSession(
 
   if (!session) {
     console.log('[Agent IPC] Creating new session:', sessionId);
-    const settings = loadSettings();
 
-    if (settings.NVIDIA_NIM_MODEL?.includes('deepseek')) {
+    const nimModel = settingsStore.get('NVIDIA_NIM_MODEL' as any);
+    if (nimModel?.includes('deepseek')) {
       console.warn('[Agent IPC] DeepSeek may not be available on NVIDIA NIM');
     }
 
@@ -69,9 +70,9 @@ function getOrCreateSession(
       sessionId,
       workspacePath,
       llmConfig: {
-        apiBase: settings.NVIDIA_NIM_BASE_URL || 'https://integrate.api.nvidia.com/v1',
-        apiKey: settings.NVIDIA_NIM_API_KEY || '',
-        model: settings.NVIDIA_NIM_MODEL || 'meta/llama-3.3-70b-instruct',
+        apiBase: settingsStore.get('NVIDIA_NIM_BASE_URL' as any) || 'https://integrate.api.nvidia.com/v1',
+        apiKey: settingsStore.get('NVIDIA_NIM_API_KEY' as any) || '',
+        model: nimModel || 'meta/llama-3.3-70b-instruct',
       },
     };
 
@@ -245,11 +246,29 @@ export function registerAgentIPCNew(): void {
   // --------------------------------------------------------------------------
   // Settings
   // --------------------------------------------------------------------------
-  ipcMain.handle('settings:get', async () => loadSettings());
+  ipcMain.handle('settings:get', async () => {
+    // Return settings in legacy format for backward compatibility
+    return getAllSettings();
+  });
 
   ipcMain.handle('settings:save', async (_event, settings: Record<string, string>) => {
-    const { saveSettings } = await import('../appdata');
-    saveSettings(settings);
+    // Update settings in electron-store
+    Object.entries(settings).forEach(([key, value]) => {
+      try {
+        // Parse values appropriately
+        let parsedValue: any = value;
+        if (value === 'true' || value === 'false') {
+          parsedValue = value === 'true';
+        } else if (!isNaN(Number(value)) && value !== '') {
+          parsedValue = Number(value);
+        } else if (value.startsWith('{') || value.startsWith('[')) {
+          parsedValue = JSON.parse(value);
+        }
+        (settingsStore as any).set(key, parsedValue);
+      } catch (err) {
+        console.warn(`[Settings] Failed to set ${key}:`, err);
+      }
+    });
 
     // Invalidate all active sessions so they pick up the new API key / model
     // on the next message without requiring an app restart.

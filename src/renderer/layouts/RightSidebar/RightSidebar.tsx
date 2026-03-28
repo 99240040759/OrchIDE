@@ -11,6 +11,7 @@ import { ScrollArea } from '../../components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../components/ui/collapsible';
 import { Separator } from '../../components/ui/separator';
 import { useAgentStore } from '../../store/agentStore';
+import { useChatStore } from '../../store/chatStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { useLayoutStore } from '../../store/layoutStore';
 import { getOrchideAPI } from '../../utils/orchide';
@@ -27,7 +28,16 @@ export const RightSidebar: React.FC = () => {
   const taskItems  = useAgentStore(state => state.taskItems);
   const artifacts  = useAgentStore(state => state.artifacts);
   const agentState = useAgentStore(state => state.agentState);
+  const taskBoundaryMode = useAgentStore(state => state.taskBoundaryMode);
+  const taskBoundaryName = useAgentStore(state => state.taskBoundaryName);
+  const taskBoundaryStatus = useAgentStore(state => state.taskBoundaryStatus);
+  const taskBoundarySummary = useAgentStore(state => state.taskBoundarySummary);
+  const isAwaitingNotify = useAgentStore(state => state.isAwaitingNotify);
+  const notifyMessage = useAgentStore(state => state.notifyMessage);
+  const notifyPaths = useAgentStore(state => state.notifyPaths);
+  const notifyBlockedOnUser = useAgentStore(state => state.notifyBlockedOnUser);
   const openFile   = useWorkspaceStore(state => state.openFile);
+  const sessionId = useChatStore(state => state.sessionId);
 
   const completedCount = taskItems.filter(t => t.status === 'done').length;
   const totalCount     = taskItems.length;
@@ -41,6 +51,12 @@ export const RightSidebar: React.FC = () => {
       useLayoutStore.getState().setEditorOpen(true);
     }
   }, [openFile]);
+
+  const handleResumeNotify = useCallback(async () => {
+    if (!sessionId || !orchide) return;
+    await orchide.agent.resumeNotify(sessionId);
+    useAgentStore.getState().clearNotify();
+  }, [sessionId]);
 
   return (
     <ScrollArea className="flex-1">
@@ -58,6 +74,49 @@ export const RightSidebar: React.FC = () => {
               <Badge variant="outline" className="flex items-center gap-1.5 px-2.5 py-2 bg-[rgba(248,81,73,0.08)] border-orch-red/20 text-orch-red text-[11px] font-medium rounded-md w-full justify-start">
                 <span className="text-[8px]">●</span> Agent error
               </Badge>
+            )}
+          </div>
+        )}
+
+        {/* Task boundary state */}
+        {taskBoundaryName && (
+          <div className="mb-3 rounded-md border border-orch-border bg-orch-surface px-2.5 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] font-semibold text-orch-fg truncate">{taskBoundaryName}</span>
+              {taskBoundaryMode && (
+                <Badge variant="outline" className="text-[9px] px-1.5 py-0.5 border-orch-border2 text-orch-fg2">
+                  {taskBoundaryMode}
+                </Badge>
+              )}
+            </div>
+            {taskBoundaryStatus && (
+              <div className="mt-1 text-[11px] text-orch-fg2">{taskBoundaryStatus}</div>
+            )}
+            {taskBoundarySummary && (
+              <div className="mt-1 text-[10px] text-orch-fg2/80 line-clamp-3">{taskBoundarySummary}</div>
+            )}
+          </div>
+        )}
+
+        {/* Notify user gate */}
+        {isAwaitingNotify && (
+          <div className="mb-3 rounded-md border border-orch-accent/40 bg-orch-accent/10 px-2.5 py-2">
+            <div className="text-[11px] font-semibold text-orch-fg mb-1">Agent Message</div>
+            <div className="text-[11px] text-orch-fg2 whitespace-pre-wrap">{notifyMessage}</div>
+            {notifyPaths.length > 0 && (
+              <div className="mt-2 text-[10px] text-orch-fg2">
+                {notifyPaths.map((p) => (
+                  <div key={p} className="truncate">{p}</div>
+                ))}
+              </div>
+            )}
+            {notifyBlockedOnUser && (
+              <button
+                className="mt-2 w-full rounded-md border border-orch-border2 bg-orch-input px-2 py-1 text-[11px] text-orch-fg hover:bg-orch-hover"
+                onClick={handleResumeNotify}
+              >
+                Continue
+              </button>
             )}
           </div>
         )}

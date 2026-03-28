@@ -12,7 +12,6 @@ import type {
   Session,
   SessionMode,
   Plan,
-  ToolCallState,
   StreamEvent,
   AgentEvent,
 } from '../core/types';
@@ -287,6 +286,8 @@ export class AgentSession extends EventEmitter {
       settings: legacySettings,
       signal: this.abortController?.signal,
       sendEvent: (event: unknown) => this.emit('agent_event', event),
+      setMode: (mode, reason) => this.setMode(mode as AgentMode, reason ?? 'Tool requested mode transition'),
+      waitForNotify: () => this.waitForUserNotify(),
     };
   }
 
@@ -297,6 +298,7 @@ export class AgentSession extends EventEmitter {
     if (this.state === 'awaiting_user_notify' && this.notifyResolve) {
       this.notifyResolve();
       this.notifyResolve = null;
+      this.notifyReject = null;
       this.state = 'generating';
     }
   }
@@ -307,8 +309,9 @@ export class AgentSession extends EventEmitter {
    */
   waitForUserNotify(): Promise<void> {
     this.state = 'awaiting_user_notify';
-    return new Promise<void>((resolve) => {
+    return new Promise<void>((resolve, reject) => {
       this.notifyResolve = resolve;
+      this.notifyReject = reject;
     });
   }
 
@@ -319,7 +322,7 @@ export class AgentSession extends EventEmitter {
     return {
       id: this.sessionId,
       title: 'Agent Session', // Would need to generate or track this
-      mode: 'agent' as SessionMode,
+      mode: 'agentic' as SessionMode,
       workspacePath: this.workspacePath,
       history: [], // Would need to convert ChatMessage[] to ChatHistoryItemWithId[]
       plan: this.currentPlan ?? undefined,

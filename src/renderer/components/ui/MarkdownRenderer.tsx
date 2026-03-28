@@ -5,6 +5,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Icon } from './Icon';
 import { renderMermaidDiagrams } from '../../utils/markdown';
+import { getVSCodeIcon } from '../../utils/fileIcons';
 import { cn } from '@/lib/utils';
 
 interface MarkdownRendererProps {
@@ -39,30 +40,6 @@ import { useWorkspaceStore } from '../../store/workspaceStore';
 
 // File extensions that trigger the "Pill" rendering for inline code
 const FILE_EXTENSIONS = ['.js', '.ts', '.jsx', '.tsx', '.json', '.html', '.css', '.md', '.py', '.go', '.rs', '.java', '.c', '.cpp', '.h', '.txt', '.yml', '.yaml', '.sh', '.bash', '.env', '.svg', '.png'];
-
-function getVSCodeIcon(fileName: string): string {
-  const ext = fileName.split('.').pop()?.toLowerCase() || '';
-  const baseUrl = 'https://cdn.jsdelivr.net/gh/vscode-icons/vscode-icons@master/icons';
-  const iconMap: Record<string, string> = {
-    ts: 'file_type_typescript.svg', tsx: 'file_type_reactts.svg',
-    js: 'file_type_js.svg', jsx: 'file_type_reactjs.svg',
-    css: 'file_type_css.svg', html: 'file_type_html.svg',
-    json: 'file_type_json.svg', md: 'file_type_markdown.svg',
-    py: 'file_type_python.svg', rs: 'file_type_rust.svg',
-    go: 'file_type_go.svg', java: 'file_type_java.svg',
-    c: 'file_type_c.svg', cpp: 'file_type_cpp.svg', h: 'file_type_c.svg',
-    svg: 'file_type_svg.svg', png: 'file_type_image.svg',
-    jpg: 'file_type_image.svg', jpeg: 'file_type_image.svg',
-    txt: 'file_type_text.svg', yml: 'file_type_yaml.svg',
-    yaml: 'file_type_yaml.svg', xml: 'file_type_xml.svg',
-    sh: 'file_type_shell.svg', bash: 'file_type_shell.svg',
-    env: 'file_type_env.svg'
-  };
-  if (fileName === '.env' || fileName.endsWith('.env')) return `${baseUrl}/file_type_light_env.svg`;
-  if (fileName === 'package.json') return `${baseUrl}/file_type_npm.svg`;
-  if (fileName === 'vite.config.js' || fileName === 'vite.config.ts') return `${baseUrl}/file_type_vite.svg`;
-  return `${baseUrl}/${iconMap[ext] || 'default_file.svg'}`;
-}
 
 const FilePill: React.FC<{ filePath: string; className?: string }> = ({ filePath, className }) => {
   const openFile = useWorkspaceStore(state => state.openFile);

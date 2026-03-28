@@ -12,6 +12,20 @@ export class WorkspaceIndexer {
   private astManager: ASTManager;
   private extractor: SymbolExtractor;
   private workspacePath: string;
+
+  private readonly onFileAdded = (filepath: string, root: string) => {
+    if (root === this.workspacePath) this.queueFile(filepath);
+  };
+
+  private readonly onFileChanged = (filepath: string, root: string) => {
+    if (root === this.workspacePath) this.queueFile(filepath);
+  };
+
+  private readonly onFileDeleted = (filepath: string, root: string) => {
+    if (root === this.workspacePath) {
+      this.db.deleteFile(filepath);
+    }
+  };
   
   private isIndexing = false;
   private indexQueue: string[] = [];
@@ -19,6 +33,8 @@ export class WorkspaceIndexer {
   private totalQueued = 0;
   private completedQueue = 0;
   private lastCompletedTotal = 0; // Track last completed count for status display
+  private isDisposed = false;
+  private disposeRequested = false;
 
   constructor(workspacePath: string) {
     this.workspacePath = workspacePath;
@@ -30,32 +46,43 @@ export class WorkspaceIndexer {
   }
 
   private bindWatcher() {
-    watcherEvents.on('file_added', (filepath: string, root: string) => {
-      if (root === this.workspacePath) this.queueFile(filepath);
-    });
-    watcherEvents.on('file_changed', (filepath: string, root: string) => {
-      if (root === this.workspacePath) this.queueFile(filepath);
-    });
-    watcherEvents.on('file_deleted', (filepath: string, root: string) => {
-      if (root === this.workspacePath) {
-        this.db.deleteFile(filepath);
-      }
-    });
+    watcherEvents.on('file_added', this.onFileAdded);
+    watcherEvents.on('file_changed', this.onFileChanged);
+    watcherEvents.on('file_deleted', this.onFileDeleted);
+  }
+
+  private unbindWatcher() {
+    watcherEvents.off('file_added', this.onFileAdded);
+    watcherEvents.off('file_changed', this.onFileChanged);
+    watcherEvents.off('file_deleted', this.onFileDeleted);
+  }
+
+  private finalizeDispose() {
+    if (this.isDisposed) return;
+    this.isDisposed = true;
+    this.db.close();
   }
 
   public async startInitialIndex() {
+    if (this.disposeRequested || this.isDisposed) return;
+
     const allFiles = await this.walkDir(this.workspacePath);
     for (const file of allFiles) {
+      if (this.disposeRequested || this.isDisposed) break;
       this.queueFile(file);
     }
   }
 
   public async reindexAll() {
+    if (this.disposeRequested || this.isDisposed) return;
+
     this.db.clearAll();
     await this.startInitialIndex();
   }
 
   private queueFile(filepath: string) {
+    if (this.disposeRequested || this.isDisposed) return;
+
     // Check extension
     if (!this.astManager.getExtensionLanguage(filepath)) return;
     
@@ -69,11 +96,11 @@ export class WorkspaceIndexer {
   }
 
   private async processQueue() {
-    if (this.isIndexing) return;
+    if (this.isIndexing || this.disposeRequested || this.isDisposed) return;
     this.isIndexing = true;
 
     try {
-      while (this.indexQueue.length > 0) {
+      while (this.indexQueue.length > 0 && !this.disposeRequested) {
         // Yield to event loop heavily to avoid UI/IPC freezing
         await new Promise(r => setTimeout(r, 5));
 
@@ -86,15 +113,26 @@ export class WorkspaceIndexer {
       }
     } finally {
       this.isIndexing = false;
-      // Store the last completed count before resetting
-      this.lastCompletedTotal = this.completedQueue;
-      this.totalQueued = 0;
-      this.completedQueue = 0;
-      this.broadcastProgress(true); // Complete
+
+      if (this.disposeRequested || this.isDisposed) {
+        this.indexQueue = [];
+        this.indexQueueSet.clear();
+        this.totalQueued = 0;
+        this.completedQueue = 0;
+        this.finalizeDispose();
+      } else {
+        // Store the last completed count before resetting
+        this.lastCompletedTotal = this.completedQueue;
+        this.totalQueued = 0;
+        this.completedQueue = 0;
+        this.broadcastProgress(true); // Complete
+      }
     }
   }
 
   private async indexFile(filepath: string) {
+    if (this.disposeRequested || this.isDisposed) return;
+
     try {
       if (!fs.existsSync(filepath)) {
         this.db.deleteFile(filepath);
@@ -173,6 +211,21 @@ export class WorkspaceIndexer {
 
   public getDb(): WorkspaceDb {
     return this.db;
+  }
+
+  public dispose(): void {
+    if (this.disposeRequested || this.isDisposed) return;
+
+    this.disposeRequested = true;
+    this.unbindWatcher();
+
+    if (!this.isIndexing) {
+      this.indexQueue = [];
+      this.indexQueueSet.clear();
+      this.totalQueued = 0;
+      this.completedQueue = 0;
+      this.finalizeDispose();
+    }
   }
 
   public getStatus() {

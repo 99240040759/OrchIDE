@@ -5,6 +5,14 @@ import { watcherEvents } from './watcher';
 // Active indexers
 const activeIndexers = new Map<string, WorkspaceIndexer>();
 
+function disposeIndexer(workspacePath: string): void {
+  const indexer = activeIndexers.get(workspacePath);
+  if (!indexer) return;
+
+  indexer.dispose();
+  activeIndexers.delete(workspacePath);
+}
+
 export function getWorkspaceIndexer(workspacePath: string): WorkspaceIndexer {
   if (!activeIndexers.has(workspacePath)) {
     const indexer = new WorkspaceIndexer(workspacePath);
@@ -20,6 +28,11 @@ export function registerIndexerIPC(): void {
   watcherEvents.on('watcher_started', (workspacePath: string) => {
     console.log(`[Indexer IPC] Auto-starting indexer for: ${workspacePath}`);
     getWorkspaceIndexer(workspacePath);
+  });
+
+  watcherEvents.on('watcher_stopped', (workspacePath: string) => {
+    console.log(`[Indexer IPC] Disposing indexer for: ${workspacePath}`);
+    disposeIndexer(workspacePath);
   });
 
   // Get indexer instance (starts and hooks up automatically if not existing)

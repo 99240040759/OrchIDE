@@ -62,12 +62,19 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   refreshFileTree: async () => {
     const ws = get().activeWorkspace;
     if (!ws) return;
+    const requestPath = ws.path;
 
     try {
       const orchide = getOrchideAPI();
       if (!orchide) return;
 
-      const result = await orchide.fs.listDir(ws.path);
+      const result = await orchide.fs.listDir(requestPath);
+
+      // Drop stale responses from previous workspace selections.
+      if (get().activeWorkspace?.path !== requestPath) {
+        return;
+      }
+
       if (result?.entries) {
         set({ fileTree: result.entries });
       }

@@ -20,7 +20,7 @@ import type {
   AgentEvent,
   AssistantMessage,
 } from '../agent/core/types';
-import { getAppDataDir, initSettings } from '../appdata';
+import { getAppDataDir } from '../appdata';
 import { settingsStore, getAllSettings } from '../services/settingsStore';
 import * as path from 'node:path';
 import {
@@ -41,11 +41,17 @@ import { getWorkspaceIndexer } from './indexer';
 const activeSessions = new Map<string, AgentSession>();
 
 /**
- * Sessions that already have event listeners attached.
- * We use this to avoid re-attaching listeners (and wiping existing ones) on
- * every 'agent:send' call.
+ * Tracks which window currently owns IPC forwarding listeners per session.
+ * Re-attachment is allowed when a session is accessed from a different window.
  */
-const sessionsWithListeners = new Set<string>();
+const sessionListenerWindows = new Map<string, number>();
+
+function removeSessionListeners(session: AgentSession): void {
+  session.removeAllListeners('stream');
+  session.removeAllListeners('agent_event');
+  session.removeAllListeners('complete');
+  session.removeAllListeners('error');
+}
 
 /**
  * Get or create an agent session.
@@ -104,9 +110,10 @@ function getOrCreateSession(
 function removeSession(sessionId: string): void {
   const session = activeSessions.get(sessionId);
   if (session) {
+    removeSessionListeners(session);
     session.abort();
     activeSessions.delete(sessionId);
-    sessionsWithListeners.delete(sessionId);
+    sessionListenerWindows.delete(sessionId);
     console.log('[Agent IPC] Session removed:', sessionId);
   }
 }
@@ -116,13 +123,14 @@ export function cleanupAllSessions(): void {
   console.log(`[Agent IPC] Cleaning up ${activeSessions.size} active sessions`);
   for (const [_sessionId, session] of activeSessions) {
     try {
+      removeSessionListeners(session);
       session.abort();
     } catch {
       // Ignore errors during cleanup
     }
   }
   activeSessions.clear();
-  sessionsWithListeners.clear();
+  sessionListenerWindows.clear();
 }
 
 // ============================================================================
@@ -134,7 +142,7 @@ interface AgentSendParams {
   message: string;
   workspacePath: string;
   workspaceName: string;
-  mode?: 'agent' | 'chat';
+  mode?: 'agentic' | 'chat';
 }
 
 // ============================================================================
@@ -277,7 +285,7 @@ export function registerAgentIPCNew(): void {
       try { session.abort(); } catch { /* ignore */ }
     }
     activeSessions.clear();
-    sessionsWithListeners.clear();
+    sessionListenerWindows.clear();
 
     return { success: true };
   });
@@ -303,23 +311,33 @@ export function registerAgentIPCNew(): void {
 /**
  * Wire up a session's EventEmitter events to IPC messages sent to the renderer.
  *
- * This function is idempotent: if a session already has listeners attached
- * (tracked via sessionsWithListeners), it returns immediately.  This prevents
- * the original bug where calling removeAllListeners() on every 'agent:send'
- * would wipe mid-flight event handlers.
+ * This function is idempotent per (sessionId, windowId) pair.
+ * If the same session is resumed from another window, listeners are rebound.
  */
 function setupSessionListeners(
   session: AgentSession,
   win: BrowserWindow,
   sessionId: string
 ): void {
-  if (sessionsWithListeners.has(sessionId)) {
-    console.log('[Agent IPC] Listeners already attached for session:', sessionId);
+  const existingWindowId = sessionListenerWindows.get(sessionId);
+  if (existingWindowId === win.id) {
+    console.log('[Agent IPC] Listeners already attached for session/window:', sessionId, win.id);
     return;
   }
 
-  sessionsWithListeners.add(sessionId);
-  console.log('[Agent IPC] Attaching listeners for session:', sessionId);
+  if (existingWindowId !== undefined && existingWindowId !== win.id) {
+    removeSessionListeners(session);
+  }
+
+  sessionListenerWindows.set(sessionId, win.id);
+  console.log('[Agent IPC] Attaching listeners for session:', sessionId, 'window:', win.id);
+
+  win.once('closed', () => {
+    if (sessionListenerWindows.get(sessionId) === win.id) {
+      removeSessionListeners(session);
+      sessionListenerWindows.delete(sessionId);
+    }
+  });
 
   // ---- Stream events --------------------------------------------------------
   session.on('stream', (event: StreamEvent) => {
@@ -557,12 +575,6 @@ function setupSessionListeners(
       data: { finishReason: 'stop' },
     });
     win.webContents.send('agent:stream-end', { sessionId });
-
-    // Allow future messages to re-attach listeners cleanly if needed.
-    // We keep the session alive but remove from the "has listeners" set
-    // so the next send can re-check.  (Listeners stay attached — we only
-    // remove from the set so the guard doesn't think they're still in-flight.)
-    // NOTE: We intentionally do NOT call removeAllListeners() here.
   });
 
   // ---- Session-level error -------------------------------------------------
@@ -573,8 +585,11 @@ function setupSessionListeners(
       sessionId,
       error: error.message,
     });
-    // Clean up listener tracking so next send re-attaches cleanly
-    sessionsWithListeners.delete(sessionId);
+
+    // If this window is no longer valid for forwarding, allow future rebinding.
+    if (win.isDestroyed()) {
+      sessionListenerWindows.delete(sessionId);
+    }
   });
 }
 

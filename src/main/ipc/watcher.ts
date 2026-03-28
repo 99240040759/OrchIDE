@@ -36,6 +36,8 @@ function buildIgnoreFunction(): (path: string) => boolean {
  * Clean up the active watcher
  */
 async function cleanupWatcher(): Promise<void> {
+  const stoppedWorkspacePath = activeWorkspacePath;
+
   if (activeWatcher) {
     try {
       await activeWatcher.close();
@@ -55,6 +57,10 @@ async function cleanupWatcher(): Promise<void> {
 
   watcherWindowId = null;
   windowCloseHandler = null;
+
+  if (stoppedWorkspacePath) {
+    watcherEvents.emit('watcher_stopped', stoppedWorkspacePath);
+  }
 }
 
 /**

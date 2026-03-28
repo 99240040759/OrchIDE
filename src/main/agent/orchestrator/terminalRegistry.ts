@@ -47,6 +47,12 @@ const commands = new Map<string, RunningCommand>();
 // Maximum output buffer per command (characters)
 const MAX_OUTPUT_CHARS = 500_000;
 
+// Periodic cleanup prevents completed command metadata from accumulating forever.
+const periodicCleanup = setInterval(() => cleanup(), 5 * 60 * 1000);
+if (typeof periodicCleanup.unref === 'function') {
+  periodicCleanup.unref();
+}
+
 /**
  * Start a command and return its ID immediately.
  * If waitMs > 0, waits up to that many ms for the process to finish before

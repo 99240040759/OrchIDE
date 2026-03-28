@@ -13,15 +13,6 @@ interface SessionRow {
   updated_at: number;
 }
 
-interface MessageRow {
-  id: string;
-  session_id: string;
-  role: string;
-  content: string;
-  reasoning: string | null;
-  timestamp: number;
-}
-
 interface ArtifactRow {
   id: string;
   session_id: string;
@@ -94,14 +85,21 @@ function initSchema(db: Database.Database): void {
   try {
     db.exec(`ALTER TABLE messages ADD COLUMN reasoning TEXT;`);
   } catch (e) {
-    // Column already exists
+    // Column already exists in migrated databases.
+    void e;
   }
   try {
     db.exec(`ALTER TABLE messages ADD COLUMN tool_calls TEXT;`);
-  } catch (e) {}
+  } catch (e) {
+    // Column already exists in migrated databases.
+    void e;
+  }
   try {
     db.exec(`ALTER TABLE messages ADD COLUMN parts TEXT;`);
-  } catch (e) {}
+  } catch (e) {
+    // Column already exists in migrated databases.
+    void e;
+  }
 }
 
 // Sessions
@@ -143,8 +141,8 @@ export function getMessages(sessionId: string): Message[] {
   return rows.map(row => {
     let toolCalls = undefined;
     let parts = undefined;
-    try { if (row.tool_calls) toolCalls = JSON.parse(row.tool_calls); } catch {}
-    try { if (row.parts) parts = JSON.parse(row.parts); } catch {}
+    try { if (row.tool_calls) toolCalls = JSON.parse(row.tool_calls); } catch (e) { void e; }
+    try { if (row.parts) parts = JSON.parse(row.parts); } catch (e) { void e; }
     
     return {
       id: row.id,

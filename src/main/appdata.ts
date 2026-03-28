@@ -6,7 +6,7 @@
 import { app } from 'electron';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
-import { settingsStore, migrateFromLegacySettings, getAllSettings } from './services/settingsStore';
+import { migrateFromLegacySettings, getAllSettings } from './services/settingsStore';
 
 let _appDataDir: string | null = null;
 

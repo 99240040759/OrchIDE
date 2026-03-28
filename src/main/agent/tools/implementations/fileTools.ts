@@ -225,6 +225,23 @@ export const createFileImpl: Tool['execute'] = async (
 
   try {
     const safePath = safeResolvePath(context.workspacePath, filePath);
+
+    try {
+      await fs.access(safePath);
+      return {
+        output: [{
+          name: 'Error',
+          description: 'File already exists',
+          content: `Refusing to overwrite existing file: ${filePath}`,
+          icon: 'error',
+        }],
+        success: false,
+        error: 'File already exists',
+      };
+    } catch {
+      // Expected: file does not exist yet.
+    }
+
     await fs.mkdir(path.dirname(safePath), { recursive: true });
     await fs.writeFile(safePath, content, 'utf-8');
     

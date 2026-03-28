@@ -100,6 +100,15 @@ export interface ToolContext {
   
   /** Function to send events to UI */
   sendEvent?: (event: unknown) => void;
+
+  /** Request a mode transition from tool implementations */
+  setMode?: (
+    mode: 'planning' | 'execution' | 'verification' | 'research',
+    reason?: string
+  ) => void;
+
+  /** Block until renderer/user resumes execution after notifyUser */
+  waitForNotify?: () => Promise<void>;
 }
 
 /**

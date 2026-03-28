@@ -51,10 +51,6 @@ export const EditorPanel: React.FC = () => {
   const updateFileContent = useWorkspaceStore(state => state.updateFileContent);
 
   const activeFile     = openFiles.find(f => f.path === activeFilePath) || null;
-  const activeLanguage = activeFile
-    ? (activeFile.language || getLanguageFromFilename(activeFile.name))
-    : 'plaintext';
-  const isMarkdownPreview = !!activeFile && activeLanguage === 'markdown';
 
   /**
    * Debounced file save handler

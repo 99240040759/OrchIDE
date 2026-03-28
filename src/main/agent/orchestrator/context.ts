@@ -179,7 +179,7 @@ export class ContextManager {
     await this.dropLowPriorityMessages(targetTokens);
 
     // Check again
-    let currentTokens = this.estimateTotalTokens(this.history.toMessages());
+    const currentTokens = this.estimateTotalTokens(this.history.toMessages());
     if (currentTokens <= targetTokens) {
       console.log('[ContextManager] Stage 1 (priority drop) sufficient');
       return;

@@ -124,4 +124,8 @@ export class WorkspaceDb {
     // Prefix case-insensitive search with SQL LIKE
     return this.db.prepare('SELECT * FROM symbols WHERE name LIKE ? ORDER BY length(name) ASC LIMIT ?').all(`${query}%`, limit) as SymbolRow[];
   }
+
+  public close(): void {
+    this.db.close();
+  }
 }

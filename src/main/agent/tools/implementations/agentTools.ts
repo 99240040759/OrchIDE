@@ -133,13 +133,31 @@ export const taskBoundaryImpl: Tool['execute'] = async (
     };
   }
 
+  const normalizedMode = mode.toUpperCase();
+  const modeMap: Record<string, 'planning' | 'execution' | 'verification'> = {
+    PLANNING: 'planning',
+    EXECUTION: 'execution',
+    VERIFICATION: 'verification',
+  };
+  const targetMode = modeMap[normalizedMode];
+
+  if (!targetMode) {
+    return {
+      output: [{ name: 'Error', description: 'Invalid mode', content: `Invalid mode: ${mode}. Expected PLANNING, EXECUTION, or VERIFICATION.` }],
+      success: false,
+      error: 'Invalid mode',
+    };
+  }
+
   const data: TaskBoundaryData = {
     taskName,
-    mode: mode as TaskBoundaryData['mode'],
+    mode: normalizedMode as TaskBoundaryData['mode'],
     taskStatus,
     taskSummary,
     predictedTaskSize,
   };
+
+  context.setMode?.(targetMode, `Task boundary: ${taskName}`);
 
   context.sendEvent?.({
     type: 'task_boundary',
@@ -191,6 +209,10 @@ export const notifyUserImpl: Tool['execute'] = async (
     notifyUser: data,
     message,
   });
+
+  if (blockedOnUser && context.waitForNotify) {
+    await context.waitForNotify();
+  }
 
   return {
     output: [{

@@ -271,7 +271,10 @@ export class ToolLoop {
         // -----------------------------------------------------------------------
         if (this.modeEnforcer) {
           for (const tc of pendingToolCalls) {
-            const modeResult = this.modeEnforcer.checkToolPermission(tc.toolCall.function.name);
+            const modeResult = this.modeEnforcer.checkToolPermission(
+              tc.toolCall.function.name,
+              tc.parsedArgs
+            );
             if (!modeResult.allowed) {
               tc.status = 'errored';
               tc.error = `Mode violation: ${modeResult.reason}${modeResult.suggestedMode ? ` Try switching to ${modeResult.suggestedMode} mode.` : ''}`;
@@ -287,13 +290,14 @@ export class ToolLoop {
         // 8. Policy check
         // -----------------------------------------------------------------------
         const toolsAutoApproved: ToolCallState[] = [];
+        const toolSettings = this.tools.getSettings();
 
         for (const tc of modeAllowedTools) {
           const tool = this.tools.get(tc.toolCall.function.name);
           const policyResult = await evaluateToolPolicy(
             tc.toolCall,
             tool,
-            { defaults: {}, overrides: [] },
+            toolSettings,
             this.session.getToolContext()
           );
 

@@ -68,6 +68,7 @@ const App: React.FC = () => {
         if (data.sessionId !== sessionId) return;
         useChatStore.getState().startStreaming();
         useAgentStore.getState().setAgentState('generating');
+        useAgentStore.getState().clearNotify();
       },
 
       // ---- Token-level text + tool events ------------------------------------
@@ -90,6 +91,7 @@ const App: React.FC = () => {
         if (data.sessionId !== sessionId) return;
         useChatStore.getState().finalizeStream();
         useAgentStore.getState().setAgentState('idle');
+        useAgentStore.getState().clearNotify();
       },
 
       // ---- Stream error -------------------------------------------------------
@@ -98,6 +100,7 @@ const App: React.FC = () => {
         console.error('[Event Bridge] Stream error:', data.error);
         useChatStore.getState().finalizeStream();
         useAgentStore.getState().setAgentState('error');
+        useAgentStore.getState().clearNotify();
       },
 
       // ---- Task progress (from updateTaskProgress tool) ----------------------
@@ -125,6 +128,55 @@ const App: React.FC = () => {
         if (data.sessionId !== sessionId) return;
         // Could update left sidebar session list in the future
         console.log('[Event Bridge] Session titled:', data.title);
+      },
+
+      // ---- Task boundary (task view orchestration state) --------------------
+      onTaskBoundary: (data: {
+        sessionId: string;
+        taskName: string;
+        mode: string;
+        taskStatus: string;
+        taskSummary: string;
+        predictedTaskSize?: number;
+      }) => {
+        if (data.sessionId !== sessionId) return;
+        useAgentStore.getState().setTaskBoundary(
+          data.mode,
+          data.taskName,
+          data.taskStatus,
+          data.taskSummary,
+          data.predictedTaskSize
+        );
+      },
+
+      // ---- Notify user gate -------------------------------------------------
+      onNotifyUser: (data: {
+        sessionId: string;
+        message: string;
+        pathsToReview?: string[];
+        blockedOnUser: boolean;
+        shouldAutoProceed?: boolean;
+      }) => {
+        if (data.sessionId !== sessionId) return;
+
+        useAgentStore.getState().setNotifyUser(
+          data.message,
+          data.pathsToReview || [],
+          data.blockedOnUser
+        );
+
+        if (data.blockedOnUser && data.shouldAutoProceed) {
+          orchide?.agent.resumeNotify(data.sessionId).finally(() => {
+            useAgentStore.getState().clearNotify();
+          });
+          return;
+        }
+
+        if (!data.blockedOnUser) {
+          setTimeout(() => {
+            useAgentStore.getState().clearNotify();
+          }, 2000);
+        }
       },
     });
 

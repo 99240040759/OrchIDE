@@ -230,6 +230,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   finalizeStream: () => {
     const { streamingContent, messages, liveParts } = get();
+    const currentSessionId = get().sessionId;
 
     const toolCalls = liveParts
       .filter(p => p.type === 'tool-call' && p.toolCall)
@@ -292,7 +293,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Update DB with tool_calls and parts since agent.ts only writes raw content initially
       if (orchide) {
         orchide.history.updateMessageExtras(
-          get().sessionId,
+          currentSessionId,
           finalMsg.toolCalls ? JSON.stringify(finalMsg.toolCalls) : null,
           finalMsg.parts ? JSON.stringify(finalMsg.parts) : null
         ).catch(err => console.error('[chatStore] Failed to update message extras', err));

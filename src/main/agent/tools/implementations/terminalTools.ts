@@ -6,7 +6,6 @@
  */
 
 import * as path from 'node:path';
-import { execSync } from 'node:child_process';
 import type { Tool, ToolContext, ToolResult } from '../types';
 import {
   startCommand,
@@ -196,38 +195,79 @@ export const runTerminalCommandImpl: Tool['execute'] = async (
     : path.join(context.workspacePath || process.cwd(), cwdRelative);
 
   try {
-    const result = execSync(command, {
-      cwd,
-      timeout: timeoutMs,
-      encoding: 'utf-8',
-      maxBuffer: 10 * 1024 * 1024,
-      env: { ...process.env, PAGER: 'cat', GIT_PAGER: 'cat' },
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    const start = await startCommand(command, cwd, context.signal, 0);
+    const startTime = Date.now();
+    const pollIntervalMs = 100;
 
-    const output = (result || '').trim();
+    while (Date.now() - startTime < timeoutMs) {
+      if (context.signal?.aborted) {
+        terminateCommand(start.commandId);
+        return {
+          output: [{
+            name: 'Command Cancelled',
+            description: command,
+            content: 'Command cancelled by user.',
+          }],
+          success: false,
+          error: 'Command cancelled',
+        };
+      }
+
+      const status = await getStatus(start.commandId, 50000, 0);
+      if (!status) {
+        return {
+          output: [{
+            name: 'Command Failed',
+            description: command,
+            content: 'Command disappeared before completion.',
+          }],
+          success: false,
+          error: 'Command not found',
+        };
+      }
+
+      if (status.status !== 'running') {
+        const combinedOutput = [status.output, status.error].filter(Boolean).join('\n');
+        const success = status.status === 'done' && status.exitCode === 0;
+        return {
+          output: [{
+            name: success ? 'Command Output' : 'Command Failed',
+            description: command,
+            content: combinedOutput.slice(0, 50000) || '(no output)',
+          }],
+          success,
+          error: success ? undefined : (status.error || `Exit code: ${status.exitCode ?? 'unknown'}`),
+        };
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    }
+
+    terminateCommand(start.commandId);
+    const timedOutStatus = await getStatus(start.commandId, 50000, 0);
+    const timeoutOutput = timedOutStatus
+      ? [timedOutStatus.output, timedOutStatus.error].filter(Boolean).join('\n')
+      : '';
 
     return {
       output: [{
-        name: 'Command Output',
+        name: 'Command Timed Out',
         description: command,
-        content: output.slice(0, 50000) || '(no output)',
+        content: timeoutOutput.slice(0, 50000) || `Command exceeded timeout of ${timeoutMs}ms and was terminated.`,
       }],
-      success: true,
+      success: false,
+      error: `Command timed out after ${timeoutMs}ms`,
     };
-  } catch (error: any) {
-    const stdout = error.stdout?.toString() || '';
-    const stderr = error.stderr?.toString() || '';
-    const output = `Exit code: ${error.status ?? 'unknown'}\n\nSTDOUT:\n${stdout}\n\nSTDERR:\n${stderr}`;
-
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     return {
       output: [{
         name: 'Command Failed',
         description: command,
-        content: output.slice(0, 50000),
+        content: message,
       }],
       success: false,
-      error: stderr.slice(0, 500) || error.message,
+      error: message,
     };
   }
 };

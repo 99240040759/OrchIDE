@@ -83,12 +83,20 @@ export const readFileImpl: Tool['execute'] = async (
     const content = await fs.readFile(safePath, 'utf-8');
     const fileName = path.basename(safePath);
     
+    // Calculate line range
+    const lines = content.split('\n');
+    const lineRange = {
+      start: 1,
+      end: lines.length,
+    };
+    
     return {
       output: [{
         name: fileName,
         description: toRelativePath(context.workspacePath, safePath),
         content,
         uri: { type: 'file', value: safePath },
+        lineRange,
       }],
       success: true,
     };
@@ -136,14 +144,35 @@ export const writeFileImpl: Tool['execute'] = async (
 
   try {
     const safePath = safeResolvePath(context.workspacePath, filePath);
+    
+    // Check if file exists to calculate diff properly
+    let oldContent = '';
+    let fileExists = false;
+    try {
+      oldContent = await fs.readFile(safePath, 'utf-8');
+      fileExists = true;
+    } catch {
+      // File doesn't exist, which is fine for write
+    }
+    
     await fs.mkdir(path.dirname(safePath), { recursive: true });
     await fs.writeFile(safePath, content, 'utf-8');
+    
+    // Calculate diff stats
+    const oldLines = oldContent ? oldContent.split('\n').length : 0;
+    const newLines = content.split('\n').length;
+    const additions = fileExists ? Math.max(0, newLines - oldLines) : newLines;
+    const deletions = fileExists ? Math.max(0, oldLines - newLines) : 0;
     
     return {
       output: [{
         name: 'File Written',
         description: toRelativePath(context.workspacePath, safePath),
         content: `Successfully wrote ${content.length} characters to ${filePath}`,
+        diffStats: {
+          additions,
+          deletions,
+        },
       }],
       success: true,
       metadata: { absolutePath: safePath },
@@ -195,11 +224,18 @@ export const createFileImpl: Tool['execute'] = async (
     await fs.mkdir(path.dirname(safePath), { recursive: true });
     await fs.writeFile(safePath, content, 'utf-8');
     
+    // Calculate diff stats for new file
+    const newLines = content.split('\n').length;
+    
     return {
       output: [{
         name: 'File Created',
         description: toRelativePath(context.workspacePath, safePath),
         content: `Successfully created ${filePath}`,
+        diffStats: {
+          additions: newLines,
+          deletions: 0,
+        },
       }],
       success: true,
       metadata: { absolutePath: safePath },

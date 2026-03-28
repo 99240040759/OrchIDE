@@ -339,6 +339,12 @@ export const replaceFileContentImpl: Tool['execute'] = async (
       const newChecksum = calculateChecksum(newContent);
       const replacedCount = allowMultiple ? occurrences : 1;
       const linesChanged = newContent.split('\n').length - lines.length;
+      
+      // Calculate proper diff stats (additions/deletions)
+      const oldLines = content.split('\n');
+      const newLines = newContent.split('\n');
+      const additions = newLines.length > oldLines.length ? newLines.length - oldLines.length : 0;
+      const deletions = oldLines.length > newLines.length ? oldLines.length - newLines.length : 0;
 
       return {
         output: [{
@@ -348,6 +354,10 @@ export const replaceFileContentImpl: Tool['execute'] = async (
             `Successfully replaced ${replacedCount} occurrence(s) in ${filePath}.\n` +
             `Lines changed: ${linesChanged >= 0 ? '+' : ''}${linesChanged}\n` +
             `New checksum: ${newChecksum}`,
+          diffStats: {
+            additions,
+            deletions,
+          },
         }],
         success: true,
         metadata: {
@@ -516,6 +526,12 @@ export const multiReplaceFileContentImpl: Tool['execute'] = async (
       }
 
       const newChecksum = calculateChecksum(content);
+      
+      // Calculate proper diff stats
+      const oldLines = originalContent.split('\n');
+      const newLines = content.split('\n');
+      const additions = newLines.length > oldLines.length ? newLines.length - oldLines.length : 0;
+      const deletions = oldLines.length > newLines.length ? oldLines.length - newLines.length : 0;
 
       const resultParts: string[] = [];
       if (successes.length > 0) {
@@ -535,6 +551,10 @@ export const multiReplaceFileContentImpl: Tool['execute'] = async (
           name: 'File Multi-Edited',
           description: filePath,
           content: resultParts.join('\n'),
+          diffStats: {
+            additions,
+            deletions,
+          },
         }],
         success: errors.length === 0,
         error: errors.length > 0 ? `${errors.length} chunk(s) failed` : undefined,

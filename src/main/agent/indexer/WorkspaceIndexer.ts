@@ -168,4 +168,13 @@ export class WorkspaceIndexer {
   public getDb(): WorkspaceDb {
     return this.db;
   }
+
+  public getStatus() {
+    return {
+      isIndexing: this.isIndexing,
+      progress: this.totalQueued > 0 ? Math.round((this.completedQueue / this.totalQueued) * 100) : 0,
+      completed: this.completedQueue,
+      total: this.totalQueued
+    };
+  }
 }

@@ -25,8 +25,15 @@ export function registerIndexerIPC(): void {
   // Get indexer instance (starts and hooks up automatically if not existing)
   ipcMain.handle('indexer:connect', async (_event, workspacePath: string) => {
     try {
-      getWorkspaceIndexer(workspacePath);
-      return { connected: true };
+      const indexer = getWorkspaceIndexer(workspacePath);
+      const status = indexer.getStatus();
+      return { 
+        connected: true,
+        isIndexing: status.isIndexing,
+        progress: status.progress,
+        completed: status.completed,
+        total: status.total
+      };
     } catch (e: any) {
       return { error: e.message };
     }

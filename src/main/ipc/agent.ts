@@ -401,6 +401,12 @@ function setupSessionListeners(
       case 'tool_result': {
         const tcs = data.toolCallState;
         const resultText: string = tcs?.output?.map((o) => o.content).join('\n') ?? '';
+        
+        // Extract line range and diff stats from the first output item (if available)
+        const firstOutput = tcs?.output?.[0];
+        const lineRange = firstOutput?.lineRange;
+        const diffStats = firstOutput?.diffStats;
+        
         win.webContents.send('agent:stream-event', {
           sessionId,
           type: 'tool-result',
@@ -412,6 +418,8 @@ function setupSessionListeners(
               status: tcs?.status === 'done' ? 'completed' : 'error',
               result: resultText || undefined,
               error: tcs?.error,
+              lineRange,
+              diffStats,
             } satisfies import('../../shared/types').ToolCallEvent,
           },
         });

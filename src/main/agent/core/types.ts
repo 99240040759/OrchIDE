@@ -116,6 +116,16 @@ export interface ContextItem {
     value: string;
   };
   hidden?: boolean;
+  /** Line range metadata for file reads (e.g., #L1-L87) */
+  lineRange?: {
+    start: number;
+    end: number;
+  };
+  /** Diff statistics for file edits */
+  diffStats?: {
+    additions: number;
+    deletions: number;
+  };
 }
 
 export interface ContextItemWithId extends ContextItem {

@@ -178,6 +178,9 @@ const InlineToolChip: React.FC<{ part: LivePart }> = ({ part }) => {
   const action      = getToolAction(toolCall.toolName, isCompleted);
   const { fileName, details } = extractFileInfo(toolCall.toolName, toolCall.args);
   const icon = getToolIcon(toolCall.toolName, fileName);
+  
+  // Extract line range
+  const lineRange = toolCall.lineRange;
 
   return (
     <div className="inline-flex items-center gap-1.5 text-[13px] text-orch-fg2 bg-white/[0.02] border border-white/[0.04] px-2.5 py-1 rounded-md my-0.5 whitespace-nowrap">
@@ -187,6 +190,16 @@ const InlineToolChip: React.FC<{ part: LivePart }> = ({ part }) => {
       </span>
       {fileName && <span className="text-orch-fg font-medium">{fileName}</span>}
       {details  && <span className="text-orch-fg2 italic text-[12px]">{details}</span>}
+      
+      {/* Line range display */}
+      {lineRange && isCompleted && (
+        <span className="text-white font-medium text-[11px] ml-1">
+          #{lineRange.start === lineRange.end 
+            ? `L${lineRange.start}` 
+            : `L${lineRange.start}-L${lineRange.end}`}
+        </span>
+      )}
+      
       {isError  && <span className="text-orch-red font-medium ml-0.5">[Failed] {toolCall.error}</span>}
     </div>
   );

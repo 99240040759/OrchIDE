@@ -172,6 +172,16 @@ export interface ToolCallEvent {
   status: 'pending' | 'running' | 'completed' | 'error';
   result?: unknown;
   error?: string;
+  /** Line range for file reads (#L1-L87) */
+  lineRange?: {
+    start: number;
+    end: number;
+  };
+  /** Diff statistics for file edits */
+  diffStats?: {
+    additions: number;
+    deletions: number;
+  };
 }
 
 export interface StreamEvent {

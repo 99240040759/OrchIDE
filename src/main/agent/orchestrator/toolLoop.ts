@@ -425,7 +425,10 @@ export class ToolLoop {
       );
 
       if (!result.success && result.error) {
-        this.history.updateToolCallStatus(tc.toolCallId, 'errored', undefined, result.error);
+        this.history.updateToolCallStatus(tc.toolCallId, 'errored', result.output, result.error);
+      } else {
+        // Store the full context items including lineRange and diffStats
+        this.history.updateToolCallStatus(tc.toolCallId, 'done', result.output);
       }
 
       // Emit result event to renderer

@@ -179,8 +179,14 @@ const InlineToolChip: React.FC<{ part: LivePart }> = ({ part }) => {
   const { fileName, details } = extractFileInfo(toolCall.toolName, toolCall.args);
   const icon = getToolIcon(toolCall.toolName, fileName);
   
-  // Extract line range
+  // Extract line range and diff stats
   const lineRange = toolCall.lineRange;
+  const diffStats = toolCall.diffStats;
+  
+  // Determine what to show based on tool type
+  const isReadTool = toolCall.toolName === 'readFile';
+  const isCreateWriteTool = ['createFile', 'writeFile'].includes(toolCall.toolName);
+  const isEditTool = ['replaceFileContent', 'multiReplaceFileContent'].includes(toolCall.toolName);
 
   return (
     <div className="inline-flex items-center gap-1.5 text-[13px] text-orch-fg2 bg-white/[0.02] border border-white/[0.04] px-2.5 py-1 rounded-md my-0.5 whitespace-nowrap">
@@ -191,12 +197,34 @@ const InlineToolChip: React.FC<{ part: LivePart }> = ({ part }) => {
       {fileName && <span className="text-orch-fg font-medium">{fileName}</span>}
       {details  && <span className="text-orch-fg2 italic text-[12px]">{details}</span>}
       
-      {/* Line range display */}
-      {lineRange && isCompleted && (
+      {/* Read: Show line range only (#L1-L150) */}
+      {isReadTool && lineRange && isCompleted && (
         <span className="text-white font-medium text-[11px] ml-1">
           #{lineRange.start === lineRange.end 
             ? `L${lineRange.start}` 
             : `L${lineRange.start}-L${lineRange.end}`}
+        </span>
+      )}
+      
+      {/* Create/Write: Show +X in green */}
+      {isCreateWriteTool && diffStats && isCompleted && diffStats.additions > 0 && (
+        <span className="text-[11px] font-medium ml-1 text-green-500">
+          +{diffStats.additions}
+        </span>
+      )}
+      
+      {/* Edit/Multi-Edit: Show +X -Y in green and red */}
+      {isEditTool && diffStats && isCompleted && (diffStats.additions > 0 || diffStats.deletions > 0) && (
+        <span className="text-[11px] font-medium ml-1">
+          {diffStats.additions > 0 && (
+            <span className="text-green-500">+{diffStats.additions}</span>
+          )}
+          {diffStats.additions > 0 && diffStats.deletions > 0 && (
+            <span className="text-orch-fg3"> </span>
+          )}
+          {diffStats.deletions > 0 && (
+            <span className="text-red-500">-{diffStats.deletions}</span>
+          )}
         </span>
       )}
       

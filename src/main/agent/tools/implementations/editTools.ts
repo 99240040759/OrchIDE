@@ -345,6 +345,10 @@ export const replaceFileContentImpl: Tool['execute'] = async (
       const newLines = newContent.split('\n');
       const additions = newLines.length > oldLines.length ? newLines.length - oldLines.length : 0;
       const deletions = oldLines.length > newLines.length ? oldLines.length - newLines.length : 0;
+      
+      // Calculate the line range where the edit occurred
+      const editStartLine = scopeStart + 1; // Convert to 1-based
+      const editEndLine = scopeStart + newScopedText.split('\n').length;
 
       return {
         output: [{
@@ -354,6 +358,10 @@ export const replaceFileContentImpl: Tool['execute'] = async (
             `Successfully replaced ${replacedCount} occurrence(s) in ${filePath}.\n` +
             `Lines changed: ${linesChanged >= 0 ? '+' : ''}${linesChanged}\n` +
             `New checksum: ${newChecksum}`,
+          lineRange: {
+            start: editStartLine,
+            end: editEndLine,
+          },
           diffStats: {
             additions,
             deletions,
@@ -551,6 +559,10 @@ export const multiReplaceFileContentImpl: Tool['execute'] = async (
           name: 'File Multi-Edited',
           description: filePath,
           content: resultParts.join('\n'),
+          lineRange: {
+            start: 1,
+            end: newLines.length,
+          },
           diffStats: {
             additions,
             deletions,

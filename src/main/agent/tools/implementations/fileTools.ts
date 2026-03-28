@@ -158,7 +158,7 @@ export const writeFileImpl: Tool['execute'] = async (
     await fs.mkdir(path.dirname(safePath), { recursive: true });
     await fs.writeFile(safePath, content, 'utf-8');
     
-    // Calculate diff stats
+    // Calculate line range and diff stats
     const oldLines = oldContent ? oldContent.split('\n').length : 0;
     const newLines = content.split('\n').length;
     const additions = fileExists ? Math.max(0, newLines - oldLines) : newLines;
@@ -169,6 +169,10 @@ export const writeFileImpl: Tool['execute'] = async (
         name: 'File Written',
         description: toRelativePath(context.workspacePath, safePath),
         content: `Successfully wrote ${content.length} characters to ${filePath}`,
+        lineRange: {
+          start: 1,
+          end: newLines,
+        },
         diffStats: {
           additions,
           deletions,
@@ -224,7 +228,7 @@ export const createFileImpl: Tool['execute'] = async (
     await fs.mkdir(path.dirname(safePath), { recursive: true });
     await fs.writeFile(safePath, content, 'utf-8');
     
-    // Calculate diff stats for new file
+    // Calculate line range for new file
     const newLines = content.split('\n').length;
     
     return {
@@ -232,6 +236,10 @@ export const createFileImpl: Tool['execute'] = async (
         name: 'File Created',
         description: toRelativePath(context.workspacePath, safePath),
         content: `Successfully created ${filePath}`,
+        lineRange: {
+          start: 1,
+          end: newLines,
+        },
         diffStats: {
           additions: newLines,
           deletions: 0,

@@ -42,7 +42,14 @@ export const SettingsWindow: React.FC<SettingsWindowProps> = () => {
     orchide?.settings.get().then((s: Record<string, string>) => setSettings(s || {}));
     if (activeWorkspace) {
       orchide?.indexer.connect(activeWorkspace.path).then((status: any) => {
-        if (status.isIndexing) setIndexStatus(p => ({ ...p, isIndexing: true }));
+        if (status.isIndexing !== undefined) {
+          setIndexStatus({
+            isIndexing: status.isIndexing,
+            progress: status.progress || 0,
+            completed: status.completed || 0,
+            total: status.total || 0
+          });
+        }
       });
       const unsub = orchide?.indexer.subscribeProgress((data: any) => {
         if (data.workspacePath === activeWorkspace.path) {

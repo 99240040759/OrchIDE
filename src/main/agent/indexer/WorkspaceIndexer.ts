@@ -18,6 +18,7 @@ export class WorkspaceIndexer {
   private indexQueueSet: Set<string> = new Set();
   private totalQueued = 0;
   private completedQueue = 0;
+  private lastCompletedTotal = 0; // Track last completed count for status display
 
   constructor(workspacePath: string) {
     this.workspacePath = workspacePath;
@@ -85,6 +86,8 @@ export class WorkspaceIndexer {
       }
     } finally {
       this.isIndexing = false;
+      // Store the last completed count before resetting
+      this.lastCompletedTotal = this.completedQueue;
       this.totalQueued = 0;
       this.completedQueue = 0;
       this.broadcastProgress(true); // Complete
@@ -131,13 +134,16 @@ export class WorkspaceIndexer {
 
   private broadcastProgress(done = false) {
     const windows = BrowserWindow.getAllWindows();
+    const completed = done ? this.lastCompletedTotal : this.completedQueue;
+    const total = done ? this.lastCompletedTotal : this.totalQueued;
+    
     for (const win of windows) {
       win.webContents.send('indexer:progress', {
         workspacePath: this.workspacePath,
         isIndexing: !done,
         progress: done ? 100 : (this.totalQueued > 0 ? Math.round((this.completedQueue / this.totalQueued) * 100) : 0),
-        completed: this.completedQueue,
-        total: this.totalQueued
+        completed,
+        total
       });
     }
   }
@@ -170,11 +176,17 @@ export class WorkspaceIndexer {
   }
 
   public getStatus() {
+    // If not currently indexing, show the last completed count
+    const completed = this.isIndexing ? this.completedQueue : this.lastCompletedTotal;
+    const total = this.isIndexing ? this.totalQueued : this.lastCompletedTotal;
+    
     return {
       isIndexing: this.isIndexing,
-      progress: this.totalQueued > 0 ? Math.round((this.completedQueue / this.totalQueued) * 100) : 0,
-      completed: this.completedQueue,
-      total: this.totalQueued
+      progress: this.isIndexing && this.totalQueued > 0 
+        ? Math.round((this.completedQueue / this.totalQueued) * 100) 
+        : 100,
+      completed,
+      total
     };
   }
 }

@@ -78,6 +78,7 @@ export const Sidebar: React.FC = () => {
     const msgs = await orchide.history.getMessages(sessId);
     setMessages((msgs || []).map((m: any) => ({
       id: m.id, role: m.role, content: m.content, timestamp: m.timestamp,
+      thinking: m.thinking, toolCalls: m.toolCalls, parts: m.parts 
     })));
   }, [setSessionId, clearForSession, setMessages]);
 

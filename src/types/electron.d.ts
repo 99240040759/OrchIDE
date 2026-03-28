@@ -123,6 +123,7 @@ export interface OrchideHistoryAPI {
   getArtifacts: (sessionId: string) => Promise<Artifact[]>;
   getTaskProgress: (sessionId: string) => Promise<string | null>;
   deleteSession: (sessionId: string) => Promise<void>;
+  updateMessageExtras: (sessionId: string, toolCalls: string | null, parts: string | null) => Promise<{ success?: boolean; error?: string }>;
 }
 
 // ============================================================================

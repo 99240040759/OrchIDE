@@ -6,6 +6,7 @@ import {
   deleteSession,
   getArtifacts,
   getTaskProgress,
+  updateLastAssistantMessageExtras,
 } from '../db';
 import { deleteSessionDir } from '../appdata';
 
@@ -35,6 +36,15 @@ export function registerHistoryIPC(): void {
       deleteSession(sessionId);
       deleteSessionDir(sessionId);
       return { error: null };
+    } catch (e: any) {
+      return { error: e.message };
+    }
+  });
+
+  ipcMain.handle('history:updateMessageExtras', async (_event, sessionId: string, toolCalls: string | null, parts: string | null) => {
+    try {
+      updateLastAssistantMessageExtras(sessionId, toolCalls, parts);
+      return { success: true };
     } catch (e: any) {
       return { error: e.message };
     }

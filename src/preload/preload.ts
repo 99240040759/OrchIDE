@@ -330,6 +330,9 @@ contextBridge.exposeInMainWorld('orchide', {
 
     deleteSession: (sessionId: string) =>
       ipcRenderer.invoke('history:deleteSession', sessionId),
+      
+    updateMessageExtras: (sessionId: string, toolCalls: string | null, parts: string | null) =>
+      ipcRenderer.invoke('history:updateMessageExtras', sessionId, toolCalls, parts),
   },
 
   // ==========================================================================

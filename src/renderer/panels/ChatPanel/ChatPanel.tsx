@@ -271,14 +271,14 @@ const PartsTimeline: React.FC<{ parts: LivePart[]; keyPrefix: string; isLive?: b
       {groups.map((group, index) => {
         if (group.kind === 'thinking') {
           return (
-            <div key={group.key} className="mt-[9px] first:mt-0">
+            <div key={group.key} className="mt-1.5 first:mt-0">
               <ThinkingBlock content={group.text} isLive={isLive && isThinking && index === groups.length - 1} />
             </div>
           );
         }
         if (group.kind === 'tools') {
           return (
-            <div key={group.key} className="flex flex-wrap gap-2 mb-0.5 mt-[9px] first:mt-0">
+            <div key={group.key} className="flex flex-wrap gap-2 mb-1 mt-1.5 first:mt-0">
               {group.tools.map(part => <InlineToolChip key={part.id} part={part} />)}
             </div>
           );
@@ -289,7 +289,7 @@ const PartsTimeline: React.FC<{ parts: LivePart[]; keyPrefix: string; isLive?: b
           <MarkdownRenderer
             key={group.key}
             content={cleanedText}
-            className="mt-[9px] first:mt-0 text-[14px] leading-[1.65] text-orch-fg"
+            className="mt-1 first:mt-0 text-[14px] leading-[1.65] text-[#FAFAFA]"
           />
         );
       })}
@@ -394,18 +394,29 @@ export const ChatPanel: React.FC = () => {
           </div>
         ) : (
           /* ── Thread state ────────────────────────────────────────── */
-          <div className="flex flex-col flex-1 h-full overflow-hidden">
+          <div className="flex flex-col flex-1 h-full overflow-hidden relative">
             <ScrollArea className="flex-1">
-              <div className="px-6 pt-6 pb-3 flex flex-col gap-6">
-                <div className="flex flex-col gap-6" ref={innerContentRef}>
+              <div className="px-6 pt-6 flex flex-col gap-6">
+                <div className="flex flex-col gap-5 pb-[160px]" ref={innerContentRef}>
                   {messages.map(msg => (
-                    <div key={msg.id} className="flex gap-3 items-start max-w-[680px] mx-auto w-full">
-                      <div className="flex-1 min-w-0">
-                        {msg.role === 'user' ? (
-                          <div className="bg-white/5 border border-orch-border rounded-[12px] px-3.5 py-2.5 text-[14px] leading-[1.65] text-orch-fg break-words">
-                            {msg.content}
-                          </div>
-                        ) : (
+                    <div 
+                      key={msg.id} 
+                      className={cn(
+                        "relative w-full",
+                        msg.role === 'user' ? "sticky top-0 z-10 py-3 -my-3" : "flex gap-3 items-start max-w-[680px] mx-auto"
+                      )}
+                    >
+                      {msg.role === 'user' && (
+                        <div className="absolute inset-0 -mx-6 px-6 bg-orch-bg/85 backdrop-blur-[12px] pointer-events-none" />
+                      )}
+                      
+                      <div className={cn("relative flex gap-3 items-start max-w-[680px] mx-auto w-full")}>
+                        <div className="flex-1 min-w-0">
+                          {msg.role === 'user' ? (
+                            <div className="bg-orch-input border border-orch-border2 shadow-sm rounded-[10px] px-4 py-3 text-[14px] leading-[1.6] text-orch-fg break-words">
+                              {msg.content}
+                            </div>
+                          ) : (
                           <div className="pt-1 flex flex-col gap-[3px]">
                             {msg.parts && msg.parts.length > 0 ? (
                               <PartsTimeline parts={msg.parts} keyPrefix={`msg-${msg.id}`} />
@@ -431,16 +442,19 @@ export const ChatPanel: React.FC = () => {
                         )}
                       </div>
                     </div>
+                    </div>
                   ))}
 
                   <LiveStreamContent />
-                  <div ref={messagesEndRef} style={{ height: 1, flexShrink: 0 }} />
+                  
+                  {/* Important empty block for scrolling dynamic padding to prevent overlapping InputBar */}
+                  <div ref={messagesEndRef} className="h-[180px] w-full shrink-0" />
                 </div>
               </div>
             </ScrollArea>
 
-            <div className="px-6 py-4 pb-5 flex justify-center">
-              <div className="w-full max-w-[680px]">
+            <div className="absolute bottom-0 left-0 right-0 px-6 py-4 pb-5 flex justify-center bg-gradient-to-t from-orch-bg via-orch-bg/90 to-transparent pt-12 pointer-events-none z-20">
+              <div className="w-full max-w-[680px] shadow-[0_0_40px_rgba(0,0,0,0.4)] rounded-[10px] pointer-events-auto">
                 <InputBar />
               </div>
             </div>

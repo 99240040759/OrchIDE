@@ -5,6 +5,9 @@
 
 import { create } from 'zustand';
 import type { ToolCallEvent, StreamEvent } from '../../shared/types';
+import { getOrchideAPI } from '../utils/orchide';
+
+const orchide = getOrchideAPI();
 
 // Re-export for convenience
 export type { ToolCallEvent };
@@ -285,6 +288,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
         isThinking: false,
         streamingContent: '',
       });
+      
+      // Update DB with tool_calls and parts since agent.ts only writes raw content initially
+      if (orchide) {
+        orchide.history.updateMessageExtras(
+          get().sessionId,
+          finalMsg.toolCalls ? JSON.stringify(finalMsg.toolCalls) : null,
+          finalMsg.parts ? JSON.stringify(finalMsg.parts) : null
+        ).catch(err => console.error('[chatStore] Failed to update message extras', err));
+      }
     } else {
       set({
         isStreaming: false,

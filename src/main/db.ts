@@ -96,6 +96,12 @@ function initSchema(db: Database.Database): void {
   } catch (e) {
     // Column already exists
   }
+  try {
+    db.exec(`ALTER TABLE messages ADD COLUMN tool_calls TEXT;`);
+  } catch (e) {}
+  try {
+    db.exec(`ALTER TABLE messages ADD COLUMN parts TEXT;`);
+  } catch (e) {}
 }
 
 // Sessions
@@ -133,14 +139,31 @@ export function insertMessage(id: string, sessionId: string, role: string, conte
 }
 
 export function getMessages(sessionId: string): Message[] {
-  const rows = getDb().prepare(`SELECT * FROM messages WHERE session_id=? ORDER BY timestamp ASC`).all(sessionId) as MessageRow[];
-  return rows.map(row => ({
-    id: row.id,
-    role: row.role as 'user' | 'assistant' | 'system',
-    content: row.content,
-    thinking: row.reasoning ?? undefined,
-    timestamp: row.timestamp,
-  }));
+  const rows = getDb().prepare(`SELECT * FROM messages WHERE session_id=? ORDER BY timestamp ASC`).all(sessionId) as any[];
+  return rows.map(row => {
+    let toolCalls = undefined;
+    let parts = undefined;
+    try { if (row.tool_calls) toolCalls = JSON.parse(row.tool_calls); } catch {}
+    try { if (row.parts) parts = JSON.parse(row.parts); } catch {}
+    
+    return {
+      id: row.id,
+      role: row.role as 'user' | 'assistant' | 'system',
+      content: row.content,
+      thinking: row.reasoning ?? undefined,
+      toolCalls,
+      parts,
+      timestamp: row.timestamp,
+    };
+  });
+}
+
+export function updateLastAssistantMessageExtras(sessionId: string, toolCalls?: string | null, parts?: string | null): void {
+  const db = getDb();
+  const row = db.prepare(`SELECT id FROM messages WHERE session_id=? AND role='assistant' ORDER BY timestamp DESC LIMIT 1`).get(sessionId) as any;
+  if (row) {
+    db.prepare(`UPDATE messages SET tool_calls=?, parts=? WHERE id=?`).run(toolCalls ?? null, parts ?? null, row.id);
+  }
 }
 
 // Artifacts

@@ -228,22 +228,22 @@ const App: React.FC = () => {
   return (
     <>
       <TitleBar />
-      <div className="app-body" style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <div className="app-body flex flex-1 overflow-hidden">
         {isLeftSidebarOpen && (
-          <div id="left-sidebar">
+          <div id="left-sidebar" className="w-[260px] flex-shrink-0 bg-orch-surface border-r border-orch-border flex flex-col">
             <Sidebar />
           </div>
         )}
-        <div id="main-content">
+        <div id="main-content" className="flex-1 flex flex-col bg-orch-bg overflow-y-auto">
           <ChatPanel />
         </div>
         {isEditorOpen && (
-          <div id="editor-panel">
+          <div id="editor-panel" className="flex-1 flex flex-col bg-orch-bg border-l border-orch-border min-w-[300px]">
             <EditorPanel />
           </div>
         )}
         {isRightSidebarOpen && (
-          <div id="right-sidebar">
+          <div id="right-sidebar" className="w-[280px] flex-shrink-0 bg-orch-surface border-l border-orch-border flex flex-col">
             <RightSidebar />
           </div>
         )}

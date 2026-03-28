@@ -1,92 +1,116 @@
-:root {
-  --titlebar-height: 35px;
-  --bg-color: #1F1F1F;
-  --titlebar-bg: #181818;
-  --text-color: #cccccc;
-  --sidebar-bg: #181818;
-  --sidebar-border: #2B2B2B;
-  --text-muted: #9d9d9d;
-  --accent-color: #0078D4;
-  --hover-bg: #2B2B2B;
-  --input-bg: #313131;
-  --input-border: #3C3C3C;
-  --input-placeholder: #989898;
-  --border-color: #2b2b2b;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   shadcn/ui CSS variables (mapped to OrchIDE COLORRULES.json dark theme)
+   These are consumed by shadcn components via hsl(var(--*)) references.
+───────────────────────────────────────────────────────────────────────────── */
+@layer base {
+  :root {
+    /* shadcn base tokens — dark theme ONLY (no light mode toggle needed for IDE) */
+    --background:         0 0% 12%;       /* #1F1F1F */
+    --foreground:         0 0% 80%;       /* #CCCCCC */
+    --card:               0 0% 9%;        /* #181818 */
+    --card-foreground:    0 0% 80%;
+    --popover:            0 0% 13%;       /* #222222 */
+    --popover-foreground: 0 0% 80%;
+    --primary:            210 100% 42%;   /* #0078D4 */
+    --primary-foreground: 0 0% 100%;
+    --secondary:          0 0% 19%;       /* #313131 */
+    --secondary-foreground: 0 0% 80%;
+    --muted:              0 0% 17%;       /* #2B2B2B */
+    --muted-foreground:   0 0% 62%;       /* #9D9D9D */
+    --accent:             0 0% 17%;       /* #2B2B2B */
+    --accent-foreground:  0 0% 80%;
+    --destructive:        0 91% 71%;      /* #F85149 */
+    --destructive-foreground: 0 0% 100%;
+    --border:             0 0% 17%;       /* #2B2B2B */
+    --input:              0 0% 24%;       /* #3C3C3C */
+    --ring:               210 100% 42%;   /* #0078D4 */
+    --radius:             0.375rem;       /* 6px — matches existing border-radius */
+
+    /* OrchIDE-specific native vars (used by Monaco and any inline style that must stay) */
+    --titlebar-height: 35px;
+  }
+
+  * {
+    border-color: theme('colors.orch-border');
+    box-sizing: border-box;
+  }
+
+  body {
+    @apply bg-orch-bg text-orch-fg;
+    font-family: theme('fontFamily.sans');
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  #root {
+    @apply flex flex-col h-screen w-screen overflow-hidden;
+  }
+
+  /* Global scrollbar theme */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { @apply bg-orch-hover rounded; }
+  ::-webkit-scrollbar-track { background: transparent; }
 }
 
-body {
-  margin: 0;
-  padding: 0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  background-color: var(--bg-color);
-  color: var(--text-color);
-  overflow: hidden;
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
+/* ─────────────────────────────────────────────────────────────────────────────
+   Custom utility: Animated glow border on InputBar during AI generation.
+   Uses @property for the conic-gradient sweep animation — this cannot be
+   expressed as Tailwind utilities. It is the ONLY custom CSS remaining.
+───────────────────────────────────────────────────────────────────────────── */
+@property --glow-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
 }
 
-#root {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  width: 100vw;
-  overflow: hidden;
+@keyframes input-glow-spin {
+  from { --glow-angle: 0deg; }
+  to   { --glow-angle: 360deg; }
 }
 
-#left-sidebar {
-  width: 260px;
-  flex-shrink: 0;
-  background-color: var(--sidebar-bg);
-  border-right: 1px solid var(--sidebar-border);
-  display: flex;
-  flex-direction: column;
+@keyframes cursor-blink {
+  0%, 50%  { opacity: 1; }
+  51%, 100% { opacity: 0; }
 }
 
-#right-sidebar {
-  width: 280px;
-  flex-shrink: 0;
-  background-color: var(--sidebar-bg);
-  border-left: 1px solid var(--sidebar-border);
-  display: flex;
-  flex-direction: column;
-}
+@layer utilities {
+  .input-generating {
+    border-color: transparent;
+  }
 
-#main-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background-color: var(--bg-color);
-  overflow-y: auto;
-}
+  .input-generating::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 12px;
+    padding: 2px;
+    background: conic-gradient(
+      from var(--glow-angle, 0deg),
+      transparent 0%,
+      #0078d4 10%,
+      #a882ff 25%,
+      #0078d4 40%,
+      transparent 50%,
+      transparent 100%
+    );
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: input-glow-spin 2.5s linear infinite;
+    pointer-events: none;
+    z-index: 1;
+  }
 
-#editor-panel {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background-color: var(--bg-color);
-  border-left: 1px solid var(--sidebar-border);
-  min-width: 300px;
-}
-/* Global Scrollbar Theme */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-thumb {
-  background: var(--hover-bg);
-  border-radius: 4px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-/* Global Animations */
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.spin, .spinning {
-  animation: spin 1s linear infinite;
+  .animate-cursor-blink {
+    animation: cursor-blink 0.8s step-end infinite;
+  }
 }

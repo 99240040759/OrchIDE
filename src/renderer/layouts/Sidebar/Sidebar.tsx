@@ -1,10 +1,14 @@
 /**
- * Sidebar component - Chat history, workspace management, and navigation
- * Cleaned up unused code and improved organization
+ * Sidebar — Uses shadcn ScrollArea + Collapsible + Skeleton + Tooltip
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Icon } from '../../components/ui/Icon';
+import { ScrollArea } from '../../components/ui/scroll-area';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../components/ui/collapsible';
+import { Skeleton } from '../../components/ui/skeleton';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../components/ui/tooltip';
+import { Separator } from '../../components/ui/separator';
 import { useChatStore } from '../../store/chatStore';
 import { useWorkspaceStore } from '../../store/workspaceStore';
 import { useAgentStore } from '../../store/agentStore';
@@ -13,32 +17,32 @@ import { FileExplorer } from '../../components/FileExplorer/FileExplorer';
 import { getFilename } from '../../../shared/utils/pathUtils';
 import { getOrchideAPI } from '../../utils/orchide';
 import type { Session } from '../../../types/electron.d';
-import './Sidebar.css';
+import { cn } from '@/lib/utils';
 
 const orchide = getOrchideAPI();
 
 export const Sidebar: React.FC = () => {
   const setSessionId = useChatStore(state => state.setSessionId);
-  const setMessages = useChatStore(state => state.setMessages);
-  const sessionId = useChatStore(state => state.sessionId);
+  const setMessages  = useChatStore(state => state.setMessages);
+  const sessionId    = useChatStore(state => state.sessionId);
 
   const activeWorkspace = useWorkspaceStore(state => state.activeWorkspace);
-  const setWorkspace = useWorkspaceStore(state => state.setWorkspace);
+  const setWorkspace    = useWorkspaceStore(state => state.setWorkspace);
 
   const clearForSession = useAgentStore(state => state.clearForSession);
 
-  const [chatSessions, setChatSessions] = useState<Session[]>([]);
-  const [showChatHistory, setShowChatHistory] = useState(false);
+  const [chatSessions,     setChatSessions]     = useState<Session[]>([]);
+  const [historyLoading,   setHistoryLoading]   = useState(true);
+  const [showChatHistory,  setShowChatHistory]  = useState(false);
 
-  // Load chat history on mount
-  useEffect(() => {
-    loadChatHistory();
-  }, []);
+  useEffect(() => { loadChatHistory(); }, []);
 
   const loadChatHistory = useCallback(async () => {
     if (!orchide) return;
+    setHistoryLoading(true);
     const sessions = await orchide.history.getChats();
     setChatSessions(sessions || []);
+    setHistoryLoading(false);
   }, []);
 
   const startNewChat = useCallback(() => {
@@ -53,18 +57,10 @@ export const Sidebar: React.FC = () => {
     if (!orchide) return;
     const folderPath = await orchide.fs.openDialog();
     if (!folderPath) return;
-
-    // Extract workspace name from path (handles both / and \)
     const name = getFilename(folderPath) || folderPath;
-
     setWorkspace({ path: folderPath, name });
-
-    // Start watcher
     await orchide.watcher.start(folderPath);
-
-    // Start new agentic session
-    const newId = uuidv4();
-    setSessionId(newId);
+    setSessionId(uuidv4());
     setMessages([]);
     clearForSession();
   }, [setWorkspace, setSessionId, setMessages, clearForSession]);
@@ -78,33 +74,25 @@ export const Sidebar: React.FC = () => {
   const openHistorySession = useCallback(async (sessId: string) => {
     setSessionId(sessId);
     clearForSession();
-
     if (!orchide) return;
-
-    // Load messages
     const msgs = await orchide.history.getMessages(sessId);
-    const mapped = (msgs || []).map((m: any) => ({
-      id: m.id,
-      role: m.role,
-      content: m.content,
-      timestamp: m.timestamp,
-    }));
-    setMessages(mapped);
+    setMessages((msgs || []).map((m: any) => ({
+      id: m.id, role: m.role, content: m.content, timestamp: m.timestamp,
+    })));
   }, [setSessionId, clearForSession, setMessages]);
 
   const deleteSession = useCallback(async (sessId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!orchide) return;
-
     await orchide.history.deleteSession(sessId);
-    if (sessId === sessionId) {
-      startNewChat();
-    }
+    if (sessId === sessionId) startNewChat();
     loadChatHistory();
   }, [sessionId, startNewChat, loadChatHistory]);
 
-  const formatTime = (ts: number): string => {
-    const diff = Date.now() - ts;
+  const formatTime = (ts: any): string => {
+    const t = Number(ts);
+    if (!t || isNaN(t)) return '';
+    const diff = Math.max(0, Date.now() - t);
     const m = Math.floor(diff / 60000);
     if (m < 60) return `${m}m`;
     const h = Math.floor(m / 60);
@@ -112,150 +100,230 @@ export const Sidebar: React.FC = () => {
     return `${Math.floor(h / 24)}d`;
   };
 
-  const isWorkspaceMode = !!activeWorkspace;
-
   return (
-    <div className="sidebar-container">
-      <div className="sidebar-top">
-        {!isWorkspaceMode ? (
-          <>
-            <button className="new-chat-btn" onClick={startNewChat}>
-              <Icon name="add" size={14} /> Start new conversation
-            </button>
+    <TooltipProvider delayDuration={400}>
+      <div className="flex flex-col flex-1 overflow-hidden text-orch-fg text-[13px]">
+        <ScrollArea className="flex-1 px-2 pt-2">
+          {!activeWorkspace ? (
+            /* ── No workspace mode ─────────────────────────────────── */
+            <div className="flex flex-col gap-1">
+              {/* New Chat */}
+              <button
+                onClick={startNewChat}
+                className="w-full flex items-center gap-2 px-3 py-1.5 mb-1 bg-orch-hover border border-orch-border rounded-md text-left font-medium text-[13px] text-orch-fg cursor-pointer transition-colors hover:bg-orch-input"
+              >
+                <Icon name="add" size={14} /> Start new conversation
+              </button>
 
-            <div className="history-link" onClick={() => setShowChatHistory(!showChatHistory)}>
-              <Icon name="history" size={14} />
-              <span>Chat History</span>
-              <Icon name="chevron-down" size={12} className={`chevron-icon ${showChatHistory ? 'open' : ''}`} />
-            </div>
-
-            {showChatHistory && (
-              <div className="history-list">
-                {chatSessions.length === 0 ? (
-                  <div className="empty-state">No chats yet</div>
-                ) : (
-                  chatSessions.map(s => (
-                    <div
-                      key={s.id}
-                      className={`conversation-item ${s.id === sessionId ? 'active' : ''}`}
-                      onClick={() => openHistorySession(s.id)}
-                    >
-                      <span className="title">{s.title || 'Untitled'}</span>
-                      <div className="item-right">
-                        <span className="time">{formatTime(s.updated_at)}</span>
-                        <button className="delete-btn" onClick={(e) => deleteSession(s.id, e)}>
-                          <Icon name="trash" size={11} />
-                        </button>
+              {/* Chat History Collapsible */}
+              <Collapsible open={showChatHistory} onOpenChange={setShowChatHistory}>
+                <CollapsibleTrigger className="flex items-center gap-2 px-3 py-1.5 w-full text-orch-fg2 cursor-pointer text-[13px] rounded-md hover:text-orch-fg hover:bg-orch-hover transition-colors">
+                  <Icon name="history" size={14} />
+                  <span>Chat History</span>
+                  <Icon
+                    name="chevron-down"
+                    size={12}
+                    className={cn('ml-auto transition-transform duration-200', showChatHistory && 'rotate-180')}
+                  />
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="py-1">
+                    {historyLoading ? (
+                      /* Skeleton loading state */
+                      <div className="flex flex-col gap-1.5 px-3 py-2">
+                        <Skeleton className="h-[18px] w-[85%] bg-orch-hover" />
+                        <Skeleton className="h-[18px] w-[70%] bg-orch-hover" />
+                        <Skeleton className="h-[18px] w-[80%] bg-orch-hover" />
                       </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
+                    ) : chatSessions.length === 0 ? (
+                      <div className="px-4 py-1.5 text-orch-fg2 text-[12px] italic">No chats yet</div>
+                    ) : (
+                      chatSessions.map(s => (
+                        <SessionItem
+                          key={s.id}
+                          session={s}
+                          isActive={s.id === sessionId}
+                          onSelect={() => openHistorySession(s.id)}
+                          onDelete={e => deleteSession(s.id, e)}
+                          formatTime={formatTime}
+                        />
+                      ))
+                    )}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
 
-            <div className="section">
-              <div className="section-header">
-                <span>Workspaces</span>
-                <span className="action-icon" onClick={openWorkspace} title="Open Workspace Folder">
-                  <Icon name="add" size={14} />
-                </span>
-              </div>
-              <div className="workspace-item section-expandable open-workspace-hint" onClick={openWorkspace}>
-                <Icon name="folder-opened" size={14} className="folder-icon" />
-                <span>Open a Folder...</span>
+              <Separator className="my-2" />
+
+              {/* Workspaces */}
+              <div>
+                <div className="flex items-center px-3 py-1 text-[11px] text-orch-fg font-semibold uppercase tracking-[0.4px] opacity-80">
+                  <span>Workspaces</span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button className="ml-auto p-0.5 rounded-md text-orch-fg2 hover:text-orch-fg hover:bg-orch-hover" onClick={openWorkspace}>
+                        <Icon name="add" size={14} />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">Open Folder</TooltipContent>
+                  </Tooltip>
+                </div>
+                <div
+                  className="flex items-center gap-2 px-3 py-1.5 mt-1 text-orch-fg2 text-[12px] font-medium cursor-pointer rounded-md hover:bg-orch-hover transition-colors"
+                  onClick={openWorkspace}
+                >
+                  <Icon name="folder-opened" size={14} className="flex-shrink-0" />
+                  <span>Open a Folder...</span>
+                </div>
               </div>
             </div>
-          </>
-        ) : (
-          <>
-            <div className="workspace-header-section">
-              <div className="workspace-active-header">
-                <Icon name="folder-opened" size={14} className="folder-icon accent" />
-                <span className="workspace-active-name">{activeWorkspace.name}</span>
+          ) : (
+            /* ── Workspace mode ────────────────────────────────────── */
+            <div className="flex flex-col gap-2">
+              {/* Workspace header */}
+              <div className="group flex items-center h-[34px] px-2 mx-1.5 mb-1 bg-primary/10 rounded-md border border-primary/20 transition-colors">
+                <Icon name="folder-opened" size={14} className="text-orch-accent flex-shrink-0 mr-2" />
+                <span className="flex-1 font-semibold text-[12px] truncate min-w-0 pr-2" title={activeWorkspace.path}>
+                  {activeWorkspace.name}
+                </span>
                 <button
-                  className="close-workspace-btn"
                   onClick={closeWorkspace}
                   title="Close Workspace"
+                  className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-md bg-transparent border-none cursor-pointer text-orch-fg2 hover:text-orch-red hover:bg-orch-red/10 transition-all opacity-0 group-hover:opacity-100"
                 >
-                  ✕
+                  <Icon name="close" size={14} />
                 </button>
               </div>
-              <button className="new-chat-btn workspace-new-chat" onClick={startNewChat}>
+
+              <button
+                onClick={startNewChat}
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 bg-orch-hover border border-orch-border rounded-md text-left font-medium text-[12px] text-orch-fg cursor-pointer transition-colors hover:bg-orch-input"
+              >
                 <Icon name="add" size={14} /> New Agentic Chat
               </button>
-            </div>
 
-            <div className="file-explorer-section">
-              <div className="section-header">
-                <span>Explorer</span>
-              </div>
-              <FileExplorer />
-            </div>
+              <Separator />
 
-            <div className="section workspace-history-section">
-              <div className="section-header">
-                <span>Workspace History</span>
+              {/* File Explorer */}
+              <div className="mt-1">
+                <div className="px-3 py-1 text-[11px] text-orch-fg font-semibold uppercase tracking-[0.4px] opacity-80">
+                  Explorer
+                </div>
+                <FileExplorer />
               </div>
-              <WorkspaceSessionList
-                workspacePath={activeWorkspace.path}
-                currentSessionId={sessionId}
-                onSelect={openHistorySession}
-                onDelete={deleteSession}
-                formatTime={formatTime}
-              />
+
+              <Separator />
+
+              {/* Workspace session history */}
+              <div className="mt-1">
+                <div className="px-3 py-1 text-[11px] text-orch-fg font-semibold uppercase tracking-[0.4px] opacity-80">
+                  Workspace History
+                </div>
+                <WorkspaceSessionList
+                  workspacePath={activeWorkspace.path}
+                  currentSessionId={sessionId}
+                  onSelect={openHistorySession}
+                  onDelete={deleteSession}
+                  formatTime={formatTime}
+                />
+              </div>
             </div>
-          </>
-        )}
+          )}
+        </ScrollArea>
+
+        {/* Bottom links */}
+        <Separator />
+        <div className="px-2 py-1.5 flex flex-col gap-0.5">
+          <button
+            className="flex items-center gap-2.5 px-3 py-1.5 text-orch-fg2 text-[13px] rounded-md cursor-pointer bg-transparent border-none w-full text-left hover:bg-orch-hover hover:text-orch-fg transition-colors"
+            onClick={() => (window as any).electron?.openSettings?.()}
+          >
+            <Icon name="settings-gear" size={14} /> Settings
+          </button>
+          <button className="flex items-center gap-2.5 px-3 py-1.5 text-orch-fg2 text-[13px] rounded-md cursor-pointer bg-transparent border-none w-full text-left hover:bg-orch-hover hover:text-orch-fg transition-colors">
+            <Icon name="comment" size={14} /> Provide Feedback
+          </button>
+        </div>
       </div>
+    </TooltipProvider>
+  );
+};
 
-      <div className="sidebar-bottom">
-        <a
-          href="#"
-          className="bottom-link"
-          onClick={(e) => { e.preventDefault(); (window as any).electron?.openSettings(); }}
+const SessionItem: React.FC<{
+  session: Session; isActive: boolean;
+  onSelect: () => void; onDelete: (e: React.MouseEvent) => void;
+  formatTime: (ts: number) => string;
+}> = ({ session, isActive, onSelect, onDelete, formatTime }) => {
+  const timeStr = formatTime(session.updated_at);
+  return (
+    <div
+      className={cn(
+        'group flex items-center h-[32px] px-2 text-orch-fg2 cursor-pointer rounded-md mb-px mx-1 transition-colors relative',
+        'hover:bg-orch-hover hover:text-orch-fg',
+        isActive && 'bg-primary/20 text-orch-fg font-medium',
+      )}
+      onClick={onSelect}
+    >
+      <span className="truncate flex-1 text-[12px] min-w-0 pr-2">{session.title || 'Untitled'}</span>
+      
+      <div className="flex items-center gap-1 flex-shrink-0">
+        {timeStr && (
+          <span className="text-[10px] text-orch-fg2 opacity-60 whitespace-nowrap group-hover:hidden truncate">
+            {timeStr}
+          </span>
+        )}
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(e); }}
+          title="Delete"
+          className="hidden group-hover:flex items-center justify-center w-6 h-6 rounded-md bg-transparent border-none cursor-pointer text-orch-fg2 hover:text-orch-red hover:bg-orch-red/10 transition-all"
         >
-          <Icon name="settings-gear" size={14} /> Settings
-        </a>
-        <a href="#" className="bottom-link"><Icon name="comment" size={14} /> Provide Feedback</a>
+          <Icon name="trash" size={13} />
+        </button>
       </div>
     </div>
   );
 };
 
+/* ─── Workspace Session List ──────────────────────────────────────────────── */
 const WorkspaceSessionList: React.FC<{
-  workspacePath: string;
-  currentSessionId: string;
-  onSelect: (id: string) => void;
-  onDelete: (id: string, e: React.MouseEvent) => void;
+  workspacePath: string; currentSessionId: string;
+  onSelect: (id: string) => void; onDelete: (id: string, e: React.MouseEvent) => void;
   formatTime: (ts: number) => string;
 }> = ({ workspacePath, currentSessionId, onSelect, onDelete, formatTime }) => {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [loading, setLoading]   = useState(true);
 
   useEffect(() => {
     if (!orchide || !workspacePath) return;
-    orchide.history.getWorkspaceSessions(workspacePath).then((s) => setSessions(s || []));
+    setLoading(true);
+    orchide.history.getWorkspaceSessions(workspacePath).then((s: Session[]) => {
+      setSessions(s || []);
+      setLoading(false);
+    });
   }, [workspacePath, currentSessionId]);
 
+  if (loading) return (
+    <div className="flex flex-col gap-1.5 px-3 py-2">
+      <Skeleton className="h-[18px] w-[75%] bg-orch-hover" />
+      <Skeleton className="h-[18px] w-[60%] bg-orch-hover" />
+    </div>
+  );
+
   if (sessions.length === 0) {
-    return <div className="empty-state">No sessions yet</div>;
+    return <div className="px-4 py-1.5 text-orch-fg2 text-[12px] italic">No sessions yet</div>;
   }
 
   return (
     <>
       {sessions.map(s => (
-        <div
+        <SessionItem
           key={s.id}
-          className={`conversation-item ${s.id === currentSessionId ? 'active' : ''}`}
-          onClick={() => onSelect(s.id)}
-        >
-          <span className="title">{s.title || 'Untitled'}</span>
-          <div className="item-right">
-            <span className="time">{formatTime(s.updated_at)}</span>
-            <button className="delete-btn" onClick={(e) => onDelete(s.id, e)}>
-              <Icon name="trash" size={11} />
-            </button>
-          </div>
-        </div>
+          session={s}
+          isActive={s.id === currentSessionId}
+          onSelect={() => onSelect(s.id)}
+          onDelete={e => onDelete(s.id, e)}
+          formatTime={formatTime}
+        />
       ))}
     </>
   );

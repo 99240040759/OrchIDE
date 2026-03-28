@@ -1,6 +1,5 @@
 /**
- * ChatPanel - Live dynamic chat interface
- * Renders messages, streaming text, thinking dropdown, and inline tool chips
+ * ChatPanel — Uses shadcn ScrollArea + Collapsible + Spinner + Progress
  */
 
 import React, { useEffect, useRef, useState, useMemo } from 'react';
@@ -9,37 +8,38 @@ import { useWorkspaceStore } from '../../store/workspaceStore';
 import { InputBar } from '../InputBar/InputBar';
 import { Icon } from '../../components/ui/Icon';
 import { MarkdownRenderer } from '../../components/ui/MarkdownRenderer';
-import './ChatPanel.css';
+import { ScrollArea } from '../../components/ui/scroll-area';
+import { Spinner } from '../../components/ui/spinner';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../components/ui/collapsible';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../components/ui/tooltip';
+import { cn } from '@/lib/utils';
 
 type TimelineGroup =
-  | { kind: 'text'; key: string; text: string }
+  | { kind: 'text';    key: string; text: string }
   | { kind: 'thinking'; key: string; text: string }
-  | { kind: 'tools'; key: string; tools: LivePart[] };
+  | { kind: 'tools';   key: string; tools: LivePart[] };
 
-/**
- * Unified tool configuration - single source of truth for tool metadata
- */
 const TOOL_CONFIG: Record<string, { icon: string; running: string; completed: string }> = {
-  webSearch: { icon: 'globe', running: 'Searching', completed: 'Searched' },
-  readFile: { icon: 'file', running: 'Reading', completed: 'Read' },
-  writeFile: { icon: 'edit', running: 'Writing', completed: 'Wrote' },
-  listDirectory: { icon: 'folder-opened', running: 'Listing', completed: 'Listed' },
-  createFile: { icon: 'new-file', running: 'Creating', completed: 'Created' },
-  deleteFile: { icon: 'trash', running: 'Deleting', completed: 'Deleted' },
-  searchInFiles: { icon: 'search', running: 'Searching', completed: 'Searched' },
-  grepSearch: { icon: 'search', running: 'Searching', completed: 'Searched' },
-  globSearch: { icon: 'folder-opened', running: 'Finding', completed: 'Found' },
-  runTerminalCommand: { icon: 'terminal', running: 'Running', completed: 'Ran' },
-  fetchUrl: { icon: 'link', running: 'Fetching', completed: 'Fetched' },
-  updateTaskProgress: { icon: 'pass', running: 'Updating', completed: 'Updated' },
-  createArtifact: { icon: 'file', running: 'Creating', completed: 'Created' },
-  replaceFileContent: { icon: 'replace', running: 'Editing', completed: 'Edited' },
-  multiReplaceFileContent: { icon: 'layers', running: 'Editing', completed: 'Edited' },
-  startTerminalCommand: { icon: 'play-circle', running: 'Starting', completed: 'Started' },
-  getCommandStatus: { icon: 'pulse', running: 'Checking', completed: 'Checked' },
-  sendCommandInput: { icon: 'send', running: 'Sending', completed: 'Sent' },
-  taskBoundary: { icon: 'eye', running: 'Setting task', completed: 'Set task' },
-  notifyUser: { icon: 'bell', running: 'Notifying', completed: 'Notified' },
+  webSearch:               { icon: 'globe',        running: 'Searching',  completed: 'Searched' },
+  readFile:                { icon: 'file',          running: 'Reading',    completed: 'Read' },
+  writeFile:               { icon: 'edit',          running: 'Writing',    completed: 'Wrote' },
+  listDirectory:           { icon: 'folder-opened', running: 'Listing',    completed: 'Listed' },
+  createFile:              { icon: 'new-file',      running: 'Creating',   completed: 'Created' },
+  deleteFile:              { icon: 'trash',         running: 'Deleting',   completed: 'Deleted' },
+  searchInFiles:           { icon: 'search',        running: 'Searching',  completed: 'Searched' },
+  grepSearch:              { icon: 'search',        running: 'Searching',  completed: 'Searched' },
+  globSearch:              { icon: 'folder-opened', running: 'Finding',    completed: 'Found' },
+  runTerminalCommand:      { icon: 'terminal',      running: 'Running',    completed: 'Ran' },
+  fetchUrl:                { icon: 'link',          running: 'Fetching',   completed: 'Fetched' },
+  updateTaskProgress:      { icon: 'pass',          running: 'Updating',   completed: 'Updated' },
+  createArtifact:          { icon: 'file',          running: 'Creating',   completed: 'Created' },
+  replaceFileContent:      { icon: 'replace',       running: 'Editing',    completed: 'Edited' },
+  multiReplaceFileContent: { icon: 'layers',        running: 'Editing',    completed: 'Edited' },
+  startTerminalCommand:    { icon: 'play-circle',   running: 'Starting',   completed: 'Started' },
+  getCommandStatus:        { icon: 'pulse',         running: 'Checking',   completed: 'Checked' },
+  sendCommandInput:        { icon: 'send',          running: 'Sending',    completed: 'Sent' },
+  taskBoundary:            { icon: 'eye',           running: 'Setting task', completed: 'Set task' },
+  notifyUser:              { icon: 'bell',          running: 'Notifying',  completed: 'Notified' },
 };
 
 const KNOWN_TOOL_NAMES = new Set(Object.keys(TOOL_CONFIG));
@@ -57,13 +57,11 @@ function collectJsonBlock(lines: string[], startLine: number, initialText: strin
   let text = initialText;
   let depth = updateBraceDepth(initialText, 0);
   let cursor = startLine;
-
   while (depth > 0 && cursor + 1 < lines.length) {
     cursor += 1;
     text += `\n${lines[cursor]}`;
     depth = updateBraceDepth(lines[cursor], depth);
   }
-
   return { endLine: cursor, jsonText: text, depth };
 }
 
@@ -71,416 +69,227 @@ function isValidJsonObject(text: string): boolean {
   try {
     const parsed = JSON.parse(text);
     return typeof parsed === 'object' && parsed !== null;
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 }
 
 function stripRawToolCallArtifacts(text: string): string {
   const lines = text.split('\n');
   const kept: string[] = [];
-
-  for (let i = 0; i < lines.length; i += 1) {
+  for (let i = 0; i < lines.length; i++) {
     const rawLine = lines[i];
     const trimmed = rawLine.trimStart();
     const toolMatch = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*(.*)$/);
-
-    if (!toolMatch) {
-      kept.push(rawLine);
-      continue;
-    }
-
+    if (!toolMatch) { kept.push(rawLine); continue; }
     const [, toolName, remainderRaw] = toolMatch;
-    if (!KNOWN_TOOL_NAMES.has(toolName)) {
-      kept.push(rawLine);
-      continue;
-    }
-
+    if (!KNOWN_TOOL_NAMES.has(toolName)) { kept.push(rawLine); continue; }
     const remainder = remainderRaw.trim();
-
     if (remainder.startsWith('{')) {
       const block = collectJsonBlock(lines, i, remainder);
-      if ((block.depth === 0 && isValidJsonObject(block.jsonText)) || block.depth > 0) {
-        i = block.endLine;
-        continue;
-      }
+      if ((block.depth === 0 && isValidJsonObject(block.jsonText)) || block.depth > 0) { i = block.endLine; continue; }
     }
-
     if (!remainder && i + 1 < lines.length) {
       const nextTrimmed = lines[i + 1].trim();
       if (nextTrimmed.startsWith('{')) {
         const block = collectJsonBlock(lines, i + 1, nextTrimmed);
-        if ((block.depth === 0 && isValidJsonObject(block.jsonText)) || block.depth > 0) {
-          i = block.endLine;
-          continue;
-        }
+        if ((block.depth === 0 && isValidJsonObject(block.jsonText)) || block.depth > 0) { i = block.endLine; continue; }
       }
     }
-
     kept.push(rawLine);
   }
-
   return kept.join('\n');
 }
 
-/**
- * Get file extension icon URL from VS Code CDN
- */
 function getVSCodeIcon(fileName: string): string {
   const ext = fileName.split('.').pop()?.toLowerCase() || '';
   const baseUrl = 'https://cdn.jsdelivr.net/gh/vscode-icons/vscode-icons@master/icons';
-
   const iconMap: Record<string, string> = {
-    ts: 'file_type_typescript.svg',
-    tsx: 'file_type_reactts.svg',
-    js: 'file_type_js.svg',
-    jsx: 'file_type_reactjs.svg',
-    css: 'file_type_css.svg',
-    html: 'file_type_html.svg',
-    json: 'file_type_json.svg',
-    md: 'file_type_markdown.svg',
-    py: 'file_type_python.svg',
-    rs: 'file_type_rust.svg',
-    go: 'file_type_go.svg',
-    java: 'file_type_java.svg',
-    c: 'file_type_c.svg',
-    cpp: 'file_type_cpp.svg',
-    h: 'file_type_c.svg',
-    svg: 'file_type_svg.svg',
-    png: 'file_type_image.svg',
-    jpg: 'file_type_image.svg',
-    jpeg: 'file_type_image.svg',
-    gif: 'file_type_image.svg',
-    txt: 'file_type_text.svg',
-    yml: 'file_type_yaml.svg',
-    yaml: 'file_type_yaml.svg',
-    xml: 'file_type_xml.svg',
-    sh: 'file_type_shell.svg',
-    bash: 'file_type_shell.svg',
+    ts: 'file_type_typescript.svg', tsx: 'file_type_reactts.svg',
+    js: 'file_type_js.svg', jsx: 'file_type_reactjs.svg',
+    css: 'file_type_css.svg', html: 'file_type_html.svg',
+    json: 'file_type_json.svg', md: 'file_type_markdown.svg',
+    py: 'file_type_python.svg', rs: 'file_type_rust.svg',
+    go: 'file_type_go.svg', java: 'file_type_java.svg',
+    c: 'file_type_c.svg', cpp: 'file_type_cpp.svg', h: 'file_type_c.svg',
+    svg: 'file_type_svg.svg', png: 'file_type_image.svg',
+    jpg: 'file_type_image.svg', jpeg: 'file_type_image.svg',
+    txt: 'file_type_text.svg', yml: 'file_type_yaml.svg',
+    yaml: 'file_type_yaml.svg', xml: 'file_type_xml.svg',
+    sh: 'file_type_shell.svg', bash: 'file_type_shell.svg',
   };
-
-  const iconFile = iconMap[ext] || 'default_file.svg';
-  return `${baseUrl}/${iconFile}`;
+  return `${baseUrl}/${iconMap[ext] || 'default_file.svg'}`;
 }
 
-/**
- * Get icon for tool based on name - uses unified TOOL_CONFIG
- */
 function getToolIcon(toolName: string, fileName?: string) {
-  if (fileName) {
-    return <img src={getVSCodeIcon(fileName)} alt="file-icon" className="tool-chip-file-icon" width="14" height="14" />;
-  }
+  if (fileName) return <img src={getVSCodeIcon(fileName)} alt="file-icon" className="w-[14px] h-[14px]" />;
   const config = TOOL_CONFIG[toolName];
-  if (config) {
-    return <Icon name={config.icon} size={14} />;
-  }
-  return <Icon name="file" size={14} />;
+  return config ? <Icon name={config.icon} size={14} /> : <Icon name="file" size={14} />;
 }
 
-/**
- * Get action verb for tool (past tense when completed) - uses unified TOOL_CONFIG
- */
 function getToolAction(toolName: string, completed = false): string {
   const config = TOOL_CONFIG[toolName];
-  if (config) {
-    return completed ? config.completed : config.running;
-  }
+  if (config) return completed ? config.completed : config.running;
   return completed ? 'Ran' : 'Running';
 }
 
-/**
- * Extract file info from tool arguments
- */
-function extractFileInfo(toolName: string, args: Record<string, unknown>): {
-  fileName?: string;
-  details?: string;
-} {
+function extractFileInfo(toolName: string, args: Record<string, unknown>): { fileName?: string; details?: string } {
   if (['readFile', 'writeFile', 'createFile', 'deleteFile', 'replaceFileContent', 'multiReplaceFileContent'].includes(toolName)) {
     const filePath = (args.filePath || args.targetPath || args.TargetFile) as string;
-    if (filePath) {
-      const fileName = filePath.split('/').pop() || filePath;
-      return { fileName };
-    }
+    if (filePath) return { fileName: filePath.split('/').pop() || filePath };
   }
-
-  if (toolName === 'webSearch') {
-    const query = args.query as string;
-    if (query) return { details: `"${query}"` };
-  }
-
-  if (toolName === 'listDirectory') {
-    const dirPath = (args.dirPath || args.DirectoryPath) as string;
-    return { details: dirPath || '.' };
-  }
-
-  if (toolName === 'searchInFiles' || toolName === 'grepSearch') {
-    const pattern = (args.pattern || args.Query) as string;
-    return { details: `"${pattern}"` };
-  }
-
-  if (toolName === 'globSearch') {
-    const pattern = (args.pattern || args.Pattern) as string;
-    return { details: pattern };
-  }
-
+  if (toolName === 'webSearch') { const q = args.query as string; if (q) return { details: `"${q}"` }; }
+  if (toolName === 'listDirectory') return { details: ((args.dirPath || args.DirectoryPath) as string) || '.' };
+  if (['searchInFiles', 'grepSearch'].includes(toolName)) return { details: `"${(args.pattern || args.Query) as string}"` };
+  if (toolName === 'globSearch') return { details: (args.pattern || args.Pattern) as string };
   if (['runTerminalCommand', 'startTerminalCommand'].includes(toolName)) {
-    const command = (args.command || args.CommandLine) as string;
-    if (command) {
-      const shortCmd = command.length > 40 ? command.slice(0, 40) + '...' : command;
-      return { details: `$ ${shortCmd}` };
-    }
+    const c = (args.command || args.CommandLine) as string;
+    if (c) return { details: `$ ${c.length > 40 ? c.slice(0, 40) + '...' : c}` };
   }
-
-  if (toolName === 'getCommandStatus') {
-    const cmdId = (args.commandId || args.CommandId) as string;
-    if (cmdId) return { details: cmdId.slice(0, 12) };
-  }
-
-  if (toolName === 'sendCommandInput') {
-    return { details: args.Terminate ? 'Terminate' : 'stdin' };
-  }
-
-  if (toolName === 'fetchUrl') {
-    const url = (args.url || args.Url) as string;
-    if (url) {
-      try {
-        const parsed = new URL(url);
-        return { details: parsed.hostname };
-      } catch {
-        return { details: url.slice(0, 30) };
-      }
-    }
-  }
-
-  if (toolName === 'updateTaskProgress') {
-    const title = args.title as string;
-    return { details: title || 'Task progress' };
-  }
-
+  if (toolName === 'getCommandStatus') { const id = (args.commandId || args.CommandId) as string; if (id) return { details: id.slice(0, 12) }; }
+  if (toolName === 'sendCommandInput') return { details: args.Terminate ? 'Terminate' : 'stdin' };
+  if (toolName === 'fetchUrl') { const url = (args.url || args.Url) as string; if (url) { try { return { details: new URL(url).hostname }; } catch { return { details: url.slice(0, 30) }; } } }
+  if (toolName === 'updateTaskProgress') return { details: (args.title as string) || 'Task progress' };
   if (toolName === 'createArtifact') {
-    const artifactName = args.name as string;
-    const filePath = args.filename as string;
-    const fileName = filePath ? filePath.split('/').pop() || filePath : undefined;
-    if (artifactName && fileName) return { fileName, details: artifactName };
-    if (artifactName) return { details: artifactName };
-    if (fileName) return { fileName };
+    const name = args.name as string;
+    const fn = (args.filename as string)?.split('/').pop();
+    if (name && fn) return { fileName: fn, details: name };
+    if (name) return { details: name };
+    if (fn) return { fileName: fn };
     return { details: 'Artifact' };
   }
-
   if (toolName === 'taskBoundary') {
-    const taskName = args.TaskName as string;
+    const tn = args.TaskName as string;
     const mode = args.Mode as string;
-    if (taskName && mode) return { details: `${mode}: ${taskName}` };
-    if (taskName) return { details: taskName };
+    if (tn && mode) return { details: `${mode}: ${tn}` };
+    if (tn) return { details: tn };
     return { details: 'Task boundary' };
   }
-
-  if (toolName === 'notifyUser') {
-    const msg = args.Message as string;
-    if (msg) return { details: msg.slice(0, 40) + (msg.length > 40 ? '...' : '') };
-    return { details: 'User notification' };
-  }
-
+  if (toolName === 'notifyUser') { const m = args.Message as string; if (m) return { details: m.slice(0, 40) + (m.length > 40 ? '...' : '') }; return { details: 'User notification' }; }
   return {};
 }
 
-/**
- * Inline tool chip component
- */
+/* ─── Inline Tool Chip ────────────────────────────────────────────────────── */
 const InlineToolChip: React.FC<{ part: LivePart }> = ({ part }) => {
   const { toolCall } = part;
   if (!toolCall) return null;
 
   const isCompleted = toolCall.status === 'completed';
-  const action = getToolAction(toolCall.toolName, isCompleted);
+  const isRunning   = toolCall.status === 'running';
+  const isError     = toolCall.status === 'error';
+  const action      = getToolAction(toolCall.toolName, isCompleted);
   const { fileName, details } = extractFileInfo(toolCall.toolName, toolCall.args);
   const icon = getToolIcon(toolCall.toolName, fileName);
-  const isRunning = toolCall.status === 'running';
-  const isError = toolCall.status === 'error';
 
   return (
-    <div className={`tool-chip ${toolCall.status}`}>
-      <span className="tool-chip-action">{action}</span>
-      <span className="tool-chip-icon">
-        {isRunning ? <Icon name="loading" size={14} spin className="spinning" /> : icon}
+    <div className="inline-flex items-center gap-1.5 text-[13px] text-orch-fg2 bg-white/[0.02] border border-white/[0.04] px-2.5 py-1 rounded-md my-0.5 whitespace-nowrap">
+      <span className="text-orch-fg2 font-normal">{action}</span>
+      <span className="flex items-center flex-shrink-0">
+        {isRunning ? <Spinner size={13} /> : icon}
       </span>
-
-      {fileName && (
-        <span className="tool-chip-file">{fileName}</span>
-      )}
-
-      {details && <span className="tool-chip-details">{details}</span>}
-
-      {isError && (
-        <>
-          <span className="tool-chip-error">[Failed] {toolCall.error}</span>
-        </>
-      )}
+      {fileName && <span className="text-orch-fg font-medium">{fileName}</span>}
+      {details  && <span className="text-orch-fg2 italic text-[12px]">{details}</span>}
+      {isError  && <span className="text-orch-red font-medium ml-0.5">[Failed] {toolCall.error}</span>}
     </div>
   );
 };
 
-/**
- * Thinking/reasoning component (invisible block layout)
- */
+/* ─── Thinking Block (uses shadcn Collapsible) ───────────────────────────── */
 const ThinkingBlock: React.FC<{ content: string; isLive?: boolean }> = ({ content, isLive }) => {
-  const [isExpanded, setIsExpanded] = useState(!!isLive);
-  const contentRef = useRef<HTMLDivElement>(null);
-  const innerRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(!!isLive);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-expand when live
-  useEffect(() => {
-    if (isLive) setIsExpanded(true);
-  }, [isLive]);
-
-  // Auto-collapse when done
+  useEffect(() => { if (isLive) setOpen(true); }, [isLive]);
   useEffect(() => {
     if (!isLive && content) {
-      const timer = setTimeout(() => setIsExpanded(false), 200);
-      return () => clearTimeout(timer);
+      const t = setTimeout(() => setOpen(false), 200);
+      return () => clearTimeout(t);
     }
   }, [isLive, content]);
 
-  // Industry-grade auto-scroll for thinking stream via ResizeObserver
   useEffect(() => {
-    const container = contentRef.current;
-    const inner = innerRef.current;
-    if (!container || !inner || !isLive || !isExpanded) return;
-
-    const scrollToBottom = () => {
-      container.scrollTop = container.scrollHeight;
-    };
-
-    // Scroll immediately upon setup
-    requestAnimationFrame(scrollToBottom);
-
-    const observer = new ResizeObserver(() => {
-      requestAnimationFrame(scrollToBottom);
-    });
-
-    observer.observe(inner);
-    return () => observer.disconnect();
-  }, [isLive, isExpanded]);
+    if (isLive && open && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  });
 
   if (!content) return null;
 
   return (
-    <div className={`thinking-inline ${isLive ? 'live' : 'completed'} ${isExpanded ? 'expanded' : 'collapsed'}`}>
-      <button className="thinking-inline-toggle" onClick={() => setIsExpanded(!isExpanded)}>
+    <Collapsible open={open} onOpenChange={setOpen} className="mt-3 mb-3 w-full">
+      <CollapsibleTrigger className="flex items-center gap-2 text-[13px] text-orch-fg2 mb-1.5 font-medium bg-transparent border-none p-1 pr-0 cursor-pointer hover:text-orch-fg transition-colors w-full text-left">
         <span>{isLive ? 'Thinking...' : 'Thought process'}</span>
-        {isExpanded ? <Icon name="chevron-down" size={14} style={{marginLeft: 'auto', opacity: 0.5}}/> : <Icon name="chevron-right" size={14} style={{marginLeft: 'auto', opacity: 0.5}}/>}
-      </button>
-      
-      {isExpanded && (
-        <div className="thinking-inline-content" ref={contentRef}>
-          <div ref={innerRef}>
-            <MarkdownRenderer content={content} className="thinking-text-content" />
-          </div>
+        <Icon
+          name={open ? 'chevron-down' : 'chevron-right'}
+          size={14}
+          className="ml-auto opacity-50"
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div ref={scrollRef} className="max-h-[120px] overflow-y-auto pl-0.5">
+          <MarkdownRenderer content={content} className="text-[13px] text-orch-fg2 opacity-85" />
         </div>
-      )}
-    </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 };
 
 function buildTimelineGroups(parts: LivePart[], keyPrefix: string): TimelineGroup[] {
   const groups: TimelineGroup[] = [];
   let pendingWhitespace = '';
-
   for (const part of parts) {
     if (part.type === 'thinking' && part.content) {
       const last = groups[groups.length - 1];
-      if (last?.kind === 'thinking') {
-        last.text += part.content;
-      } else {
-        groups.push({
-          kind: 'thinking',
-          key: `${keyPrefix}-thinking-${part.id}`,
-          text: part.content,
-        });
-      }
+      if (last?.kind === 'thinking') { last.text += part.content; }
+      else groups.push({ kind: 'thinking', key: `${keyPrefix}-thinking-${part.id}`, text: part.content });
       continue;
     }
-
     if (part.type === 'text' && part.content) {
       const chunk = part.content;
-      const last = groups[groups.length - 1];
-
-      if (last?.kind === 'text') {
-        last.text += chunk;
-      } else {
-        if (!/\S/.test(chunk)) {
-          pendingWhitespace += chunk;
-          continue;
-        }
-
-        groups.push({
-          kind: 'text',
-          key: `${keyPrefix}-text-${part.id}`,
-          text: `${pendingWhitespace}${chunk}`,
-        });
+      const last  = groups[groups.length - 1];
+      if (last?.kind === 'text') { last.text += chunk; }
+      else {
+        if (!/\S/.test(chunk)) { pendingWhitespace += chunk; continue; }
+        groups.push({ kind: 'text', key: `${keyPrefix}-text-${part.id}`, text: `${pendingWhitespace}${chunk}` });
         pendingWhitespace = '';
       }
       continue;
     }
-
     if (part.type === 'tool-call' && part.toolCall) {
       pendingWhitespace = '';
       const last = groups[groups.length - 1];
-      if (last?.kind === 'tools') {
-        last.tools.push(part);
-      } else {
-        groups.push({
-          kind: 'tools',
-          key: `${keyPrefix}-tools-${part.id}`,
-          tools: [part],
-        });
-      }
+      if (last?.kind === 'tools') last.tools.push(part);
+      else groups.push({ kind: 'tools', key: `${keyPrefix}-tools-${part.id}`, tools: [part] });
     }
   }
-
   return groups;
 }
 
 const PartsTimeline: React.FC<{ parts: LivePart[]; keyPrefix: string; isLive?: boolean }> = ({ parts, keyPrefix, isLive }) => {
-  // Memoize buildTimelineGroups to avoid expensive recalculation on every render
-  const groups = useMemo(() => buildTimelineGroups(parts, keyPrefix), [parts, keyPrefix]);
+  const groups     = useMemo(() => buildTimelineGroups(parts, keyPrefix), [parts, keyPrefix]);
   const isThinking = useChatStore(state => state.isThinking);
-
   return (
     <>
       {groups.map((group, index) => {
         if (group.kind === 'thinking') {
-          const isLastGroup = index === groups.length - 1;
           return (
-            <div key={group.key} className="message-part-group">
-              <ThinkingBlock
-                content={group.text}
-                isLive={isLive && isThinking && isLastGroup}
-              />
+            <div key={group.key} className="mt-[9px] first:mt-0">
+              <ThinkingBlock content={group.text} isLive={isLive && isThinking && index === groups.length - 1} />
             </div>
           );
         }
-
         if (group.kind === 'tools') {
           return (
-            <div key={group.key} className="message-part-group tool-chips-inline">
-              {group.tools.map((part) => (
-                <InlineToolChip key={part.id} part={part} />
-              ))}
+            <div key={group.key} className="flex flex-wrap gap-2 mb-0.5 mt-[9px] first:mt-0">
+              {group.tools.map(part => <InlineToolChip key={part.id} part={part} />)}
             </div>
           );
         }
-
         const cleanedText = stripRawToolCallArtifacts(group.text);
-        if (!cleanedText.trim()) {
-          return null;
-        }
-
+        if (!cleanedText.trim()) return null;
         return (
           <MarkdownRenderer
             key={group.key}
             content={cleanedText}
-            className="message-part-group message-content markdown"
+            className="mt-[9px] first:mt-0 text-[14px] leading-[1.65] text-orch-fg"
           />
         );
       })}
@@ -488,24 +297,20 @@ const PartsTimeline: React.FC<{ parts: LivePart[]; keyPrefix: string; isLive?: b
   );
 };
 
-/**
- * Live streaming content component
- * Renders parts in chronological order (thinking → text → tools interleaved)
- */
+/* ─── Live streaming ──────────────────────────────────────────────────────── */
 const LiveStreamContent: React.FC = () => {
-  const liveParts = useChatStore((state) => state.liveParts);
-  const isStreaming = useChatStore((state) => state.isStreaming);
-  const isThinking = useChatStore((state) => state.isThinking);
+  const liveParts  = useChatStore(state => state.liveParts);
+  const isStreaming = useChatStore(state => state.isStreaming);
+  const isThinking  = useChatStore(state => state.isThinking);
 
   if (!isStreaming) return null;
 
-  // If no parts yet, show a clean, muted waiting state
   if (liveParts.length === 0) {
     return (
-      <div className="message-row assistant">
-        <div className="message-bubble">
-          <div className="thinking-inline-toggle" style={{ opacity: 0.7, cursor: 'default' }}>
-            <Icon name="loading" size={14} spin />
+      <div className="flex gap-3 items-start max-w-[680px] mx-auto w-full">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 text-[13px] text-orch-fg2 opacity-70 p-1">
+            <Spinner size={14} />
             <span>Thinking...</span>
           </div>
         </div>
@@ -514,164 +319,134 @@ const LiveStreamContent: React.FC = () => {
   }
 
   return (
-    <div className="message-row assistant">
-      <div className="message-bubble">
+    <div className="flex gap-3 items-start max-w-[680px] mx-auto w-full">
+      <div className="flex-1 min-w-0 pt-1 flex flex-col gap-[3px]">
         <PartsTimeline parts={liveParts} keyPrefix="live" isLive={true} />
-        {/* Show cursor when actively streaming text (not just thinking) */}
         {isStreaming && !isThinking && liveParts.some(p => p.type === 'text') && (
-          <span className="streaming-cursor" />
+          <span className="inline-block w-[2px] h-[16px] bg-orch-accent ml-0.5 align-text-bottom animate-cursor-blink" />
         )}
       </div>
     </div>
   );
 };
 
-/**
- * Main ChatPanel component
- */
+/* ─── Main ChatPanel ──────────────────────────────────────────────────────── */
 export const ChatPanel: React.FC = () => {
-  const messages = useChatStore((state) => state.messages);
-  const isStreaming = useChatStore((state) => state.isStreaming);
-  const activeWorkspace = useWorkspaceStore((state) => state.activeWorkspace);
+  const messages        = useChatStore(state => state.messages);
+  const isStreaming     = useChatStore(state => state.isStreaming);
+  const activeWorkspace = useWorkspaceStore(state => state.activeWorkspace);
 
-  const threadMessagesRef = useRef<HTMLDivElement>(null);
-  const innerContentRef = useRef<HTMLDivElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const shouldAutoScrollRef = useRef(true);
-  const isProgrammaticScrollRef = useRef(false);
+  const scrollViewportRef        = useRef<HTMLDivElement>(null);
+  const innerContentRef          = useRef<HTMLDivElement>(null);
+  const messagesEndRef           = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollRef      = useRef(true);
+  const isProgrammaticScrollRef  = useRef(false);
 
-  // Track whether user manually scrolls away from bottom
   useEffect(() => {
-    const container = threadMessagesRef.current;
+    const container = scrollViewportRef.current;
     if (!container) return;
-
     const onScroll = () => {
       if (isProgrammaticScrollRef.current) return;
-
-      const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-      // If user aggressively scrolled up past 150px, disable lock
-      shouldAutoScrollRef.current = distanceFromBottom <= 150;
+      const dist = container.scrollHeight - container.scrollTop - container.clientHeight;
+      shouldAutoScrollRef.current = dist <= 150;
     };
-
     container.addEventListener('scroll', onScroll, { passive: true });
     return () => container.removeEventListener('scroll', onScroll);
   }, []);
 
-  // Industry-grade auto-scroll via ResizeObserver + EndRef Anchor
   useEffect(() => {
-    const container = threadMessagesRef.current;
     const content = innerContentRef.current;
-    if (!container || !content) return;
-
+    if (!content) return;
     const scrollToBottom = () => {
       if (!shouldAutoScrollRef.current) return;
-      
       isProgrammaticScrollRef.current = true;
-      
-      const behavior: ScrollBehavior = isStreaming ? 'auto' : 'smooth';
-      
-      // Use the bulletproof anchor natively
-      messagesEndRef.current?.scrollIntoView({
-        behavior,
-        block: 'end'
-      });
-
-      // Release the programmatic scroll lock right after layout scroll
-      requestAnimationFrame(() => {
-        isProgrammaticScrollRef.current = false;
-      });
+      messagesEndRef.current?.scrollIntoView({ behavior: isStreaming ? 'auto' : 'smooth', block: 'end' });
+      requestAnimationFrame(() => { isProgrammaticScrollRef.current = false; });
     };
-
-    // Scroll immediately on setup
     requestAnimationFrame(scrollToBottom);
-
-    const observer = new ResizeObserver(() => {
-      requestAnimationFrame(scrollToBottom);
-    });
-
+    const observer = new ResizeObserver(() => requestAnimationFrame(scrollToBottom));
     observer.observe(content);
-
     return () => observer.disconnect();
   }, [isStreaming]);
 
   const isEmpty = messages.length === 0 && !isStreaming;
 
   return (
-    <div className="chatpanel-container">
-      {isEmpty ? (
-        <div className="chatpanel-home">
-          <div className="chatpanel-content">
-            <div className="orch-logo-mark">✦</div>
-            <h1 className="chatpanel-title">
-              {activeWorkspace ? (
-                <>
-                  <span className="workspace-label">Workspace:</span>{' '}
-                  <span className="workspace-name">{activeWorkspace.name}</span>
-                </>
-              ) : (
-                'What can I help you with?'
+    <TooltipProvider delayDuration={400}>
+      <div className="flex flex-col flex-1 h-full overflow-hidden">
+        {isEmpty ? (
+          /* ── Home state ──────────────────────────────────────────── */
+          <div className="flex flex-col justify-center items-center flex-1 p-6">
+            <div className="w-full max-w-[680px] flex flex-col items-center" style={{ transform: 'translateY(-8vh)' }}>
+              <div className="text-[36px] mb-4 opacity-60 text-orch-accent">✦</div>
+              <h1 className="text-[22px] font-medium mb-5 text-orch-fg text-center">
+                {activeWorkspace ? (
+                  <><span className="text-orch-fg2">Workspace: </span><span>{activeWorkspace.name}</span></>
+                ) : 'What can I help you with?'}
+              </h1>
+              {activeWorkspace && (
+                <p className="text-[13px] text-orch-fg2 mb-4 text-center">
+                  Agentic mode — I can read, write, and manage files in your workspace.
+                </p>
               )}
-            </h1>
-            {activeWorkspace && (
-              <p className="workspace-hint">
-                Agentic mode — I can read, write, and manage files in your workspace.
-              </p>
-            )}
-            <InputBar />
-          </div>
-        </div>
-      ) : (
-        <div className="chatpanel-thread">
-          <div className="thread-messages" ref={threadMessagesRef}>
-            <div className="thread-messages-inner" ref={innerContentRef}>
-            {messages.map((msg) => (
-              <div key={msg.id} className={`message-row ${msg.role}`}>
-                <div className="message-bubble">
-                  {msg.role === 'assistant' ? (
-                    <>
-                      {msg.parts && msg.parts.length > 0 ? (
-                        <PartsTimeline parts={msg.parts} keyPrefix={`msg-${msg.id}`} />
-                      ) : (
-                        <>
-                          {msg.thinking && (
-                            <ThinkingBlock content={msg.thinking} />
-                          )}
-                          {msg.toolCalls && msg.toolCalls.length > 0 && (
-                            <div className="tool-chips-inline">
-                              {msg.toolCalls.map((tc) => (
-                                <InlineToolChip
-                                  key={tc.id}
-                                  part={{ type: 'tool-call', id: tc.id, toolCall: tc, timestamp: msg.timestamp }}
-                                />
-                              ))}
-                            </div>
-                          )}
-                          {msg.content && (
-                            <MarkdownRenderer
-                              content={stripRawToolCallArtifacts(msg.content)}
-                              className="message-content markdown"
-                            />
-                          )}
-                        </>
-                      )}
-                    </>
-                  ) : (
-                    <div className="message-content">{msg.content}</div>
-                  )}
-                </div>
-              </div>
-            ))}
-
-            <LiveStreamContent />
-            <div ref={messagesEndRef} style={{ height: 1, width: '100%', flexShrink: 0 }} />
+              <InputBar />
             </div>
           </div>
+        ) : (
+          /* ── Thread state ────────────────────────────────────────── */
+          <div className="flex flex-col flex-1 h-full overflow-hidden">
+            <ScrollArea className="flex-1">
+              <div className="px-6 pt-6 pb-3 flex flex-col gap-6">
+                <div className="flex flex-col gap-6" ref={innerContentRef}>
+                  {messages.map(msg => (
+                    <div key={msg.id} className="flex gap-3 items-start max-w-[680px] mx-auto w-full">
+                      <div className="flex-1 min-w-0">
+                        {msg.role === 'user' ? (
+                          <div className="bg-white/5 border border-orch-border rounded-[12px] px-3.5 py-2.5 text-[14px] leading-[1.65] text-orch-fg break-words">
+                            {msg.content}
+                          </div>
+                        ) : (
+                          <div className="pt-1 flex flex-col gap-[3px]">
+                            {msg.parts && msg.parts.length > 0 ? (
+                              <PartsTimeline parts={msg.parts} keyPrefix={`msg-${msg.id}`} />
+                            ) : (
+                              <>
+                                {msg.thinking && <ThinkingBlock content={msg.thinking} />}
+                                {msg.toolCalls && msg.toolCalls.length > 0 && (
+                                  <div className="flex flex-wrap gap-2 mb-0.5">
+                                    {msg.toolCalls.map(tc => (
+                                      <InlineToolChip key={tc.id} part={{ type: 'tool-call', id: tc.id, toolCall: tc, timestamp: msg.timestamp }} />
+                                    ))}
+                                  </div>
+                                )}
+                                {msg.content && (
+                                  <MarkdownRenderer
+                                    content={stripRawToolCallArtifacts(msg.content)}
+                                    className="text-[14px] leading-[1.65] text-orch-fg"
+                                  />
+                                )}
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
 
-          <div className="thread-input-area">
-            <InputBar />
+                  <LiveStreamContent />
+                  <div ref={messagesEndRef} style={{ height: 1, flexShrink: 0 }} />
+                </div>
+              </div>
+            </ScrollArea>
+
+            <div className="px-6 py-4 pb-5 flex justify-center">
+              <div className="w-full max-w-[680px]">
+                <InputBar />
+              </div>
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </TooltipProvider>
   );
 };

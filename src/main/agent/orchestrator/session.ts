@@ -44,13 +44,12 @@ export interface AgentSessionConfig {
 export interface AgentSessionEvents {
   'stream': (event: StreamEvent) => void;
   'agent_event': (event: AgentEvent) => void;
-  'tool_approval_required': (toolCalls: ToolCallState[]) => void;
   'plan_approval_required': (plan: Plan) => void;
   'error': (error: Error) => void;
   'complete': () => void;
 }
 
-export type SessionState = 'idle' | 'generating' | 'awaiting_tool_approval' | 'awaiting_plan_approval' | 'awaiting_user_notify' | 'executing_tools' | 'error';
+export type SessionState = 'idle' | 'generating' | 'awaiting_plan_approval' | 'awaiting_user_notify' | 'executing_tools' | 'error';
 
 // System prompt is now in ./systemPrompt.ts (3650+ lines)
 
@@ -74,10 +73,10 @@ export class AgentSession extends EventEmitter {
   private state: SessionState = 'idle';
   private abortController: AbortController | null = null;
   private currentPlan: Plan | null = null;
-  private pendingToolApprovals: ToolCallState[] = [];
   
   // Notify user gate: resolve this to unblock the tool loop
-  private notifyResolve: (() => void) | null = null;
+  private notifyResolve: ((value: void | PromiseLike<void>) => void) | null = null;
+  private notifyReject: ((reason?: any) => void) | null = null;
 
   constructor(sessionConfig: AgentSessionConfig) {
     super();
@@ -142,8 +141,6 @@ export class AgentSession extends EventEmitter {
       contextManager: this.contextManager,
       modeEnforcer: this.modeEnforcer,
       onStream: (event) => this.emit('stream', event),
-
-      onToolApprovalRequired: (calls) => this.handleToolApprovalRequired(calls),
     });
   }
 
@@ -185,60 +182,11 @@ export class AgentSession extends EventEmitter {
     if (this.abortController) {
       this.abortController.abort();
     }
-  }
-
-  /**
-   * Approve pending tool calls
-   */
-  async approveToolCalls(toolCallIds: string[]): Promise<void> {
-    if (this.state !== 'awaiting_tool_approval') {
-      throw new Error('No tool calls pending approval');
+    if (this.notifyReject) {
+      this.notifyReject(new Error('Session aborted'));
+      this.notifyResolve = null;
+      this.notifyReject = null;
     }
-
-    const approved = this.pendingToolApprovals.filter(tc => toolCallIds.includes(tc.toolCallId));
-    const rejected = this.pendingToolApprovals.filter(tc => !toolCallIds.includes(tc.toolCallId));
-
-    // Mark rejected as errored
-    for (const tc of rejected) {
-      this.history.updateToolCallStatus(tc.toolCallId, 'errored');
-    }
-
-    // Clear pending approvals
-    this.pendingToolApprovals = [];
-    
-    if (approved.length > 0) {
-      // Mark approved tool calls as ready to execute
-      for (const tc of approved) {
-        this.history.updateToolCallStatus(tc.toolCallId, 'generated');
-      }
-      
-      // Continue the tool loop - it will pick up the approved tools
-      this.state = 'generating';
-      this.abortController = new AbortController();
-      
-      try {
-        await this.toolLoop.run(this.abortController.signal);
-        this.state = 'idle';
-        this.emit('complete');
-      } catch (error) {
-        this.state = 'error';
-        const err = error instanceof Error ? error : new Error(String(error));
-        this.emit('error', err);
-        throw err;
-      }
-    } else {
-      // All rejected - add rejection message and continue
-      this.history.addAssistantMessage('I understand. I won\'t proceed with those actions.');
-      this.state = 'idle';
-      this.emit('complete');
-    }
-  }
-
-  /**
-   * Reject all pending tool calls
-   */
-  async rejectToolCalls(): Promise<void> {
-    return this.approveToolCalls([]);
   }
 
   /**
@@ -283,7 +231,7 @@ export class AgentSession extends EventEmitter {
       throw new Error('Plan not found');
     }
 
-    this.currentPlan.status = 'failed'; // No 'rejected' status in PlanStatus
+    this.currentPlan.status = 'rejected';
     this.currentPlan = null;
     this.state = 'idle';
     
@@ -466,12 +414,6 @@ export class AgentSession extends EventEmitter {
   // ==========================================================================
   // Internal Methods
   // ==========================================================================
-
-  private async handleToolApprovalRequired(toolCalls: ToolCallState[]): Promise<void> {
-    this.state = 'awaiting_tool_approval';
-    this.pendingToolApprovals = toolCalls;
-    this.emit('tool_approval_required', toolCalls);
-  }
 
   /** Handle plan creation (legacy — kept for compatibility) */
   handlePlanCreated(plan: Plan): void {

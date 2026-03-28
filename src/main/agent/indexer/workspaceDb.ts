@@ -102,18 +102,14 @@ export class WorkspaceDb {
       'INSERT OR REPLACE INTO symbols (id, filepath, name, kind, line_start, line_end, snippet) VALUES (?, ?, ?, ?, ?, ?, ?)'
     );
 
-    const insertMany = this.db.transaction((items: Omit<SymbolRow, 'id'>[]) => {
-      // First, clear existing symbols for this file
-      this.db.prepare('DELETE FROM symbols WHERE filepath = ?').run(filepath);
-      
-      for (const item of items) {
-        // ID includes kind to distinguish between an export and the thing being exported on the same line
-        const id = `${filepath}#${item.name}#${item.kind}#${item.line_start}`;
-        insert.run(id, item.filepath, item.name, item.kind, item.line_start, item.line_end, item.snippet);
-      }
-    });
-
-    insertMany(symbols);
+    // First, clear existing symbols for this file
+    this.db.prepare('DELETE FROM symbols WHERE filepath = ?').run(filepath);
+    
+    for (const item of symbols) {
+      // ID includes kind to distinguish between an export and the thing being exported on the same line
+      const id = `${filepath}#${item.name}#${item.kind}#${item.line_start}`;
+      insert.run(id, item.filepath, item.name, item.kind, item.line_start, item.line_end, item.snippet);
+    }
   }
 
   public findDefinitions(name: string): SymbolRow[] {

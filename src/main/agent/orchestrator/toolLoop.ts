@@ -67,8 +67,6 @@ export interface ToolLoopConfig {
   contextManager: ContextManager;
   modeEnforcer?: ModeEnforcer;
   onStream: (event: StreamEvent) => void;
-
-  onToolApprovalRequired: (toolCalls: ToolCallState[]) => Promise<void>;
 }
 
 /** Tracks tool usage patterns for stall detection */
@@ -104,8 +102,6 @@ export class ToolLoop {
   private modeEnforcer?: ModeEnforcer;
   private onStream: (event: StreamEvent) => void;
 
-  private onToolApprovalRequired: (toolCalls: ToolCallState[]) => Promise<void>;
-
   constructor(config: ToolLoopConfig) {
     this.session = config.session;
     this.llm = config.llmClient;
@@ -115,8 +111,6 @@ export class ToolLoop {
     this.contextManager = config.contextManager;
     this.modeEnforcer = config.modeEnforcer;
     this.onStream = config.onStream;
-
-    this.onToolApprovalRequired = config.onToolApprovalRequired;
   }
 
   /**
@@ -290,9 +284,8 @@ export class ToolLoop {
         const modeAllowedTools = pendingToolCalls.filter((tc) => tc.status !== 'errored');
 
         // -----------------------------------------------------------------------
-        // 8. Policy check: split into auto-approved vs needs-human-approval
+        // 8. Policy check
         // -----------------------------------------------------------------------
-        const toolsNeedingApproval: ToolCallState[] = [];
         const toolsAutoApproved: ToolCallState[] = [];
 
         for (const tc of modeAllowedTools) {
@@ -304,10 +297,8 @@ export class ToolLoop {
             this.session.getToolContext()
           );
 
-          if (policyResult.policy === 'allowedWithoutPermission') {
+          if (policyResult.policy === 'allowedWithoutPermission' || policyResult.policy === 'allowedWithPermission') {
             toolsAutoApproved.push(tc);
-          } else if (policyResult.policy === 'allowedWithPermission') {
-            toolsNeedingApproval.push(tc);
           } else {
             tc.status = 'errored';
             tc.error = 'Tool is disabled by policy';
@@ -315,18 +306,10 @@ export class ToolLoop {
         }
 
         // -----------------------------------------------------------------------
-        // 9. Ask for human approval if required
-        // -----------------------------------------------------------------------
-        if (toolsNeedingApproval.length > 0) {
-          await this.onToolApprovalRequired(toolsNeedingApproval);
-        }
-
-        // -----------------------------------------------------------------------
-        // 10. Execute all approved tool calls (with result truncation)
+        // 9. Execute all approved tool calls (with result truncation)
         // -----------------------------------------------------------------------
         const toExecute = [
           ...toolsAutoApproved,
-          ...toolsNeedingApproval.filter((tc) => tc.status === 'generated'),
         ];
 
         for (const tc of toExecute) {

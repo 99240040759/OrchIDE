@@ -15,6 +15,7 @@ export class WorkspaceIndexer {
   
   private isIndexing = false;
   private indexQueue: string[] = [];
+  private indexQueueSet: Set<string> = new Set();
   private totalQueued = 0;
   private completedQueue = 0;
 
@@ -42,7 +43,7 @@ export class WorkspaceIndexer {
   }
 
   public async startInitialIndex() {
-    const allFiles = this.walkDir(this.workspacePath);
+    const allFiles = await this.walkDir(this.workspacePath);
     for (const file of allFiles) {
       this.queueFile(file);
     }
@@ -58,8 +59,9 @@ export class WorkspaceIndexer {
     if (!this.astManager.getExtensionLanguage(filepath)) return;
     
     // Add to queue
-    if (!this.indexQueue.includes(filepath)) {
+    if (!this.indexQueueSet.has(filepath)) {
       this.indexQueue.push(filepath);
+      this.indexQueueSet.add(filepath);
       this.totalQueued++;
       this.processQueue();
     }
@@ -75,6 +77,7 @@ export class WorkspaceIndexer {
         await new Promise(r => setTimeout(r, 5));
 
         const filepath = this.indexQueue.shift()!;
+        this.indexQueueSet.delete(filepath);
         await this.indexFile(filepath);
         this.completedQueue++;
 
@@ -95,7 +98,7 @@ export class WorkspaceIndexer {
         return;
       }
 
-      const stat = fs.statSync(filepath);
+      const stat = await fs.promises.stat(filepath);
       const hash = `${stat.mtimeMs}-${stat.size}`;
       const currentHash = this.db.getFileHash(filepath);
 
@@ -103,7 +106,7 @@ export class WorkspaceIndexer {
         return; // Unchanged
       }
 
-      const content = fs.readFileSync(filepath, 'utf8');
+      const content = await fs.promises.readFile(filepath, 'utf8');
       const tree = await this.astManager.parseFile(filepath, content);
       
       if (tree) {
@@ -139,21 +142,25 @@ export class WorkspaceIndexer {
     }
   }
 
-  private walkDir(dir: string): string[] {
+  private async walkDir(dir: string): Promise<string[]> {
     let results: string[] = [];
-    if (!fs.existsSync(dir)) return results;
+    try {
+      if (!fs.existsSync(dir)) return results;
 
-    const list = fs.readdirSync(dir);
-    for (const file of list) {
-      if (shouldIgnore(file)) continue;
-      
-      const filePath = path.join(dir, file);
-      const stat = fs.statSync(filePath);
-      if (stat && stat.isDirectory()) {
-         results = results.concat(this.walkDir(filePath));
-      } else {
-         results.push(filePath);
+      const list = await fs.promises.readdir(dir);
+      for (const file of list) {
+        if (shouldIgnore(file)) continue;
+        
+        const filePath = path.join(dir, file);
+        const stat = await fs.promises.stat(filePath);
+        if (stat && stat.isDirectory()) {
+           results = results.concat(await this.walkDir(filePath));
+        } else {
+           results.push(filePath);
+        }
       }
+    } catch (e) {
+      console.error(`[WorkspaceIndexer] Failed to walk directory ${dir}:`, e);
     }
     return results;
   }

@@ -386,6 +386,16 @@ export class ModeEnforcer {
    */
   private checkVerificationTerminalCommand(args?: Record<string, unknown>): ToolPermissionResult {
     const command = (args?.command as string) || '';
+
+    // Security check: reject chaining or background operators
+    if (/[&|;]/.test(command)) {
+      return {
+        allowed: false,
+        reason: 'Command chaining or background execution (&, |, ;) is not allowed in Verification mode.',
+        suggestedMode: 'execution',
+      };
+    }
+
     const cmdLower = command.toLowerCase().trim();
 
     // Check if it's a test command

@@ -175,43 +175,22 @@ export class ContextManager {
   private async performCompaction(result: CompactionResult): Promise<void> {
     const targetTokens = Math.floor(this.config.contextWindowSize * 0.7);
 
-    // Stage 1: Truncate large tool results using head+tail
-    await this.truncateLargeToolResults();
-
-    // Check if we're under target
-    let currentTokens = this.estimateTotalTokens(this.history.toMessages());
-    if (currentTokens <= targetTokens) {
-      console.log('[ContextManager] Stage 1 (truncation) sufficient');
-      return;
-    }
-
-    // Stage 2: Priority-based message dropping
+    // Stage 1: Priority-based message dropping (tool truncation is handled at execution time)
     await this.dropLowPriorityMessages(targetTokens);
 
     // Check again
-    currentTokens = this.estimateTotalTokens(this.history.toMessages());
+    let currentTokens = this.estimateTotalTokens(this.history.toMessages());
     if (currentTokens <= targetTokens) {
-      console.log('[ContextManager] Stage 2 (priority drop) sufficient');
+      console.log('[ContextManager] Stage 1 (priority drop) sufficient');
       return;
     }
 
-    // Stage 3: Create summary and aggressive compaction
+    // Stage 2: Create summary and aggressive compaction
     await this.aggressiveCompaction(targetTokens, result);
   }
 
   /**
-   * Stage 1: Truncate large tool results using head+tail strategy.
-   * Note: This is now handled at tool execution time by toolLoop.ts
-   * This method is kept for any tool results that slip through.
-   */
-  private async truncateLargeToolResults(): Promise<void> {
-    // Tool result truncation is now handled in toolLoop.ts at execution time
-    // This stage is a no-op but kept for the multi-stage flow
-    console.log('[ContextManager] Stage 1: Tool results already truncated at execution time');
-  }
-
-  /**
-   * Stage 2: Drop low-priority messages while preserving essential ones.
+   * Stage 1: Drop low-priority messages while preserving essential ones.
    * Uses the built-in ChatHistory.compact() method instead of manual removal.
    */
   private async dropLowPriorityMessages(targetTokens: number): Promise<void> {
@@ -219,7 +198,7 @@ export class ContextManager {
     const compactResult = this.history.compact(targetTokens);
     
     if (compactResult.compacted) {
-      console.log(`[ContextManager] Stage 2: Compacted ${compactResult.removedCount} messages`);
+      console.log(`[ContextManager] Stage 1: Compacted ${compactResult.removedCount} messages`);
     }
   }
 
@@ -228,7 +207,7 @@ export class ContextManager {
    */
 
   /**
-   * Stage 3: Aggressive compaction with summary generation.
+   * Stage 2: Aggressive compaction with summary generation.
    * Uses the built-in ChatHistory.compact() for final aggressive trimming.
    */
   private async aggressiveCompaction(

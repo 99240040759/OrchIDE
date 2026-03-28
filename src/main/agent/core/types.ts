@@ -186,7 +186,8 @@ export type PlanStatus =
   | 'in_progress'    // Currently executing
   | 'completed'      // All steps done
   | 'paused'         // User paused execution
-  | 'failed';        // Execution failed
+  | 'failed'         // Execution failed
+  | 'rejected';      // User rejected the plan
 
 export type PlanStepStatus =
   | 'pending'

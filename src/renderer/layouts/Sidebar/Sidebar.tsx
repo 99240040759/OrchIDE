@@ -108,6 +108,11 @@ export const Sidebar: React.FC = () => {
           {!activeWorkspace ? (
             /* ── No workspace mode ─────────────────────────────────── */
             <div className="flex flex-col gap-1">
+              {/* Logo header */}
+              <div className="flex items-center justify-center py-4 mb-2">
+                <img src="/logo.png" alt="OrchIDE" className="w-16 h-16" />
+              </div>
+              
               {/* New Chat */}
               <button
                 onClick={startNewChat}

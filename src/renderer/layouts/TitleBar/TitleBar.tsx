@@ -26,6 +26,7 @@ export const TitleBar: React.FC = () => {
 
   const titleCenter = activeWorkspace ? (
     <>
+      <img src="/logo.png" alt="OrchIDE" className="w-5 h-5 inline-block mr-2 align-middle" />
       OrchIDE{' '}
       <span className="text-orch-fg2 mx-1">/</span>{' '}
       <span className="text-orch-fg font-semibold">{activeWorkspace.name}</span>
@@ -37,7 +38,10 @@ export const TitleBar: React.FC = () => {
       )}
     </>
   ) : (
-    <span className="text-orch-fg tracking-[0.3px]">OrchIDE</span>
+    <span className="text-orch-fg tracking-[0.3px] flex items-center">
+      <img src="/logo.png" alt="OrchIDE" className="w-5 h-5 inline-block mr-2" />
+      OrchIDE
+    </span>
   );
 
   return (

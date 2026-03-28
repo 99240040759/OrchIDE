@@ -76,6 +76,7 @@ export const SettingsWindow: React.FC<SettingsWindowProps> = () => {
         className="h-[35px] flex items-center justify-center border-b border-orch-border bg-orch-surface flex-shrink-0"
         style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       >
+        <img src="/logo.png" alt="OrchIDE" className="w-4 h-4 inline-block mr-2" />
         <span className="text-[13px] font-medium text-orch-fg">Settings — OrchIDE</span>
       </div>
 
